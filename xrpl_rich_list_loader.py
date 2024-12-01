@@ -226,6 +226,7 @@ class SupabaseUploader:
                     WHEN label LIKE 'Binance%' THEN 'Binance'
                     WHEN label LIKE 'WhiteBIT%' THEN 'WhiteBIT'
                     WHEN label LIKE 'CoinCola%' THEN 'CoinCola'
+                    WHEN label LIKE 'gatehub%' THEN 'gatehub'
                     ELSE REGEXP_REPLACE(
                         REGEXP_REPLACE(label, '^~', ''),
                         '\s*\([0-9]+\)$', ''
@@ -246,6 +247,7 @@ class SupabaseUploader:
                     WHEN label LIKE 'Binance%' THEN 'Binance'
                     WHEN label LIKE 'WhiteBIT%' THEN 'WhiteBIT'
                     WHEN label LIKE 'CoinCola%' THEN 'CoinCola'
+                    WHEN label LIKE 'gatehub%' THEN 'gatehub'
                     ELSE REGEXP_REPLACE(
                         REGEXP_REPLACE(label, '^~', ''),
                         '\s*\([0-9]+\)$', ''
