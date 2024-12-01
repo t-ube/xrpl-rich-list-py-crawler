@@ -208,6 +208,207 @@ class SupabaseUploader:
                 else:
                     raise Exception("Failed to upload batch after max retries")
 
+    def update_summary_table(self) -> bool:
+        try:
+            sql_query = """
+            INSERT INTO xrpl_rich_list_summary (grouped_label, count, total_balance, total_escrow, total_xrp, created_at)
+            WITH latest_snapshot AS (
+                SELECT snapshot_date 
+                FROM xrpl_rich_list 
+                ORDER BY snapshot_date DESC 
+                LIMIT 1
+            )
+            SELECT 
+                CASE 
+                    WHEN label LIKE 'Ripple%' THEN 'Ripple'
+                    WHEN label LIKE 'Coinbase%' THEN 'Coinbase'
+                    WHEN label LIKE 'Bitrue%' THEN 'Bitrue'
+                    WHEN label LIKE 'Binance%' THEN 'Binance'
+                    WHEN label LIKE 'WhiteBIT%' THEN 'WhiteBIT'
+                    WHEN label LIKE 'CoinCola%' THEN 'CoinCola'
+                    ELSE REGEXP_REPLACE(
+                        REGEXP_REPLACE(label, '^~', ''),
+                        '\s*\([0-9]+\)$', ''
+                    )
+                END AS grouped_label,
+                COUNT(*) as count,
+                SUM(balance_xrp) as total_balance,
+                SUM(escrow_xrp) as total_escrow,
+                SUM(balance_xrp + escrow_xrp) as total_xrp,
+                (SELECT snapshot_date FROM latest_snapshot) as created_at
+            FROM xrpl_rich_list
+            WHERE snapshot_date = (SELECT snapshot_date FROM latest_snapshot)
+            GROUP BY 
+                CASE 
+                    WHEN label LIKE 'Ripple%' THEN 'Ripple'
+                    WHEN label LIKE 'Coinbase%' THEN 'Coinbase'
+                    WHEN label LIKE 'Bitrue%' THEN 'Bitrue'
+                    WHEN label LIKE 'Binance%' THEN 'Binance'
+                    WHEN label LIKE 'WhiteBIT%' THEN 'WhiteBIT'
+                    WHEN label LIKE 'CoinCola%' THEN 'CoinCola'
+                    ELSE REGEXP_REPLACE(
+                        REGEXP_REPLACE(label, '^~', ''),
+                        '\s*\([0-9]+\)$', ''
+                    )
+                END
+            ORDER BY total_balance DESC;
+            """
+            
+            response = self.supabase.rpc('execute_sql', {'query': sql_query}).execute()
+            if hasattr(response, 'error') and response.error:
+                raise Exception(f"Summary table update failed: {response.error}")
+                
+            print("Successfully updated summary table")
+            return True
+            
+        except Exception as e:
+            print(f"Error updating summary table: {e}")
+            return False
+
+    def update_balance_changes(self) -> bool:
+        try:
+             # まず既存のデータを削除
+            cleanup_query = """
+            DELETE FROM xrpl_rich_list_changes;
+            """
+
+            # 新しいデータを挿入
+            changes_query = """
+            WITH current_totals AS (
+                SELECT 
+                    grouped_label,
+                    total_xrp,
+                    created_at
+                FROM xrpl_rich_list_summary
+                WHERE created_at = (
+                    SELECT created_at 
+                    FROM xrpl_rich_list_summary 
+                    ORDER BY created_at DESC 
+                    LIMIT 1
+                )
+            ),
+            period_changes AS (
+                SELECT 
+                    c.grouped_label,
+                    1 as period_days,
+                    c.total_xrp - COALESCE(d1.total_xrp, c.total_xrp) as day_change,
+                    CASE 
+                        WHEN COALESCE(d1.total_xrp, c.total_xrp) = 0 THEN 0
+                        ELSE ((c.total_xrp - COALESCE(d1.total_xrp, c.total_xrp)) / COALESCE(d1.total_xrp, c.total_xrp) * 100)
+                    END as day_percentage,
+                    c.total_xrp - COALESCE(d7.total_xrp, c.total_xrp) as week_change,
+                    CASE 
+                        WHEN COALESCE(d7.total_xrp, c.total_xrp) = 0 THEN 0
+                        ELSE ((c.total_xrp - COALESCE(d7.total_xrp, c.total_xrp)) / COALESCE(d7.total_xrp, c.total_xrp) * 100)
+                    END as week_percentage,
+                    c.total_xrp - COALESCE(d30.total_xrp, c.total_xrp) as month_change,
+                    CASE 
+                        WHEN COALESCE(d30.total_xrp, c.total_xrp) = 0 THEN 0
+                        ELSE ((c.total_xrp - COALESCE(d30.total_xrp, c.total_xrp)) / COALESCE(d30.total_xrp, c.total_xrp) * 100)
+                    END as month_percentage
+                FROM current_totals c
+                LEFT JOIN xrpl_rich_list_summary d1 ON 
+                    c.grouped_label = d1.grouped_label AND 
+                    d1.created_at = (
+                        SELECT created_at 
+                        FROM xrpl_rich_list_summary 
+                        WHERE created_at < c.created_at
+                        ORDER BY created_at DESC 
+                        LIMIT 1
+                    )
+                LEFT JOIN xrpl_rich_list_summary d7 ON 
+                    c.grouped_label = d7.grouped_label AND 
+                    d7.created_at = (
+                        SELECT created_at 
+                        FROM xrpl_rich_list_summary 
+                        WHERE created_at <= c.created_at - INTERVAL '7 days'
+                        ORDER BY created_at DESC 
+                        LIMIT 1
+                    )
+                LEFT JOIN xrpl_rich_list_summary d30 ON 
+                    c.grouped_label = d30.grouped_label AND 
+                    d30.created_at = (
+                        SELECT created_at 
+                        FROM xrpl_rich_list_summary 
+                        WHERE created_at <= c.created_at - INTERVAL '30 days'
+                        ORDER BY created_at DESC 
+                        LIMIT 1
+                    )
+            )
+            INSERT INTO xrpl_rich_list_changes 
+                (grouped_label, period_days, balance_change, percentage_change, calculated_at)
+            SELECT 
+                grouped_label,
+                1,
+                day_change,
+                day_percentage,
+                CURRENT_TIMESTAMP
+            FROM period_changes
+            UNION ALL
+            SELECT 
+                grouped_label,
+                7,
+                week_change,
+                week_percentage,
+                CURRENT_TIMESTAMP
+            FROM period_changes
+            UNION ALL
+            SELECT 
+                grouped_label,
+                30,
+                month_change,
+                month_percentage,
+                CURRENT_TIMESTAMP
+            FROM period_changes;
+            """
+            
+            # クリーンアップを実行
+            cleanup_response = self.supabase.rpc('execute_sql', {'query': cleanup_query}).execute()
+            if hasattr(cleanup_response, 'error') and cleanup_response.error:
+                raise Exception(f"Changes cleanup failed: {cleanup_response.error}")
+            
+            # 新しいデータを挿入
+            changes_response = self.supabase.rpc('execute_sql', {'query': changes_query}).execute()
+            if hasattr(changes_response, 'error') and changes_response.error:
+                raise Exception(f"Balance changes update failed: {changes_response.error}")
+            
+            print("Successfully updated balance changes")
+            return True
+            
+        except Exception as e:
+            print(f"Error updating balance changes: {e}")
+            return False
+
+    def cleanup_old_data(self) -> bool:
+        try:
+            # xrpl_rich_list の10日以上前のデータを削除
+            rich_list_query = """
+            DELETE FROM xrpl_rich_list
+            WHERE snapshot_date < CURRENT_TIMESTAMP - INTERVAL '10 days';
+            """
+            
+            # xrpl_rich_list_summary の370日以上前のデータを削除
+            summary_query = """
+            DELETE FROM xrpl_rich_list_summary
+            WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '370 days';
+            """
+            
+            # クエリを実行
+            response1 = self.supabase.rpc('execute_sql', {'query': rich_list_query}).execute()
+            if hasattr(response1, 'error') and response1.error:
+                raise Exception(f"Rich list cleanup failed: {response1.error}")
+                
+            response2 = self.supabase.rpc('execute_sql', {'query': summary_query}).execute()
+            if hasattr(response2, 'error') and response2.error:
+                raise Exception(f"Summary table cleanup failed: {response2.error}")
+
+            print("Successfully cleaned up old data")
+            return True
+            
+        except Exception as e:
+            print(f"Error cleaning up old data: {e}")
+            return False
+
 def main():
     try:
         # 一時的なCSVファイルのパスを設定
@@ -224,6 +425,21 @@ def main():
         uploader = SupabaseUploader()
         if not uploader.upload_from_csv(temp_csv_path):
             raise Exception("Upload to Supabase failed")
+
+        # サマリーテーブルを更新
+        print("Updating summary table...")
+        if not uploader.update_summary_table():
+            raise Exception("Summary table update failed")
+        
+        # 残高変化を計算
+        print("Calculating balance changes...")
+        if not uploader.update_balance_changes():
+            raise Exception("Balance changes calculation failed")
+        
+        # 古いデータを削除
+        print("Cleaning up old data...")
+        if not uploader.cleanup_old_data():
+            raise Exception("Data cleanup failed")
         
         # 一時ファイルを削除
         try:
