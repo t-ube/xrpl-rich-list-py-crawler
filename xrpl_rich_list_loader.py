@@ -227,6 +227,7 @@ class SupabaseUploader:
                     WHEN label LIKE 'WhiteBIT%' THEN 'WhiteBIT'
                     WHEN label LIKE 'CoinCola%' THEN 'CoinCola'
                     WHEN label LIKE '%gatehub%' THEN 'gatehub'
+                    WHEN label LIKE 'Crypto.com%' THEN 'Crypto.com'
                     ELSE REGEXP_REPLACE(
                         REGEXP_REPLACE(label, '^~', ''),
                         '\s*\([0-9]+\)$', ''
@@ -248,15 +249,18 @@ class SupabaseUploader:
                     WHEN label LIKE 'WhiteBIT%' THEN 'WhiteBIT'
                     WHEN label LIKE 'CoinCola%' THEN 'CoinCola'
                     WHEN label LIKE '%gatehub%' THEN 'gatehub'
+                    WHEN label LIKE 'Crypto.com%' THEN 'Crypto.com'
                     ELSE REGEXP_REPLACE(
                         REGEXP_REPLACE(label, '^~', ''),
                         '\s*\([0-9]+\)$', ''
                     )
                 END
-            ORDER BY total_balance DESC;
+            ORDER BY total_balance DESC
             """
             
-            response = self.supabase.rpc('execute_sql', {'query': sql_query}).execute()
+            # 直接クエリを実行
+            response = self.supabase.query(sql_query).execute()
+            
             if hasattr(response, 'error') and response.error:
                 raise Exception(f"Summary table update failed: {response.error}")
                 
@@ -269,7 +273,7 @@ class SupabaseUploader:
 
     def update_balance_changes(self) -> bool:
         try:
-             # まず既存のデータを削除
+            # まず既存のデータを削除
             cleanup_query = """
             DELETE FROM xrpl_rich_list_changes;
             """
@@ -365,12 +369,12 @@ class SupabaseUploader:
             """
             
             # クリーンアップを実行
-            cleanup_response = self.supabase.rpc('execute_sql', {'query': cleanup_query}).execute()
+            cleanup_response = self.supabase.query(cleanup_query).execute()
             if hasattr(cleanup_response, 'error') and cleanup_response.error:
                 raise Exception(f"Changes cleanup failed: {cleanup_response.error}")
             
             # 新しいデータを挿入
-            changes_response = self.supabase.rpc('execute_sql', {'query': changes_query}).execute()
+            changes_response = self.supabase.query(changes_query).execute()
             if hasattr(changes_response, 'error') and changes_response.error:
                 raise Exception(f"Balance changes update failed: {changes_response.error}")
             
@@ -396,11 +400,11 @@ class SupabaseUploader:
             """
             
             # クエリを実行
-            response1 = self.supabase.rpc('execute_sql', {'query': rich_list_query}).execute()
+            response1 = self.supabase.query(rich_list_query).execute()
             if hasattr(response1, 'error') and response1.error:
                 raise Exception(f"Rich list cleanup failed: {response1.error}")
                 
-            response2 = self.supabase.rpc('execute_sql', {'query': summary_query}).execute()
+            response2 = self.supabase.query(summary_query).execute()
             if hasattr(response2, 'error') and response2.error:
                 raise Exception(f"Summary table cleanup failed: {response2.error}")
 
