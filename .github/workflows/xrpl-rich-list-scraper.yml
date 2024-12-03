@@ -1,8 +1,8 @@
 name: XRP Rich List Scraper
 
 on:
-  schedule:
-    - cron: '0 0 * * *'
+  repository_dispatch:
+    types: [cron-job]
   workflow_dispatch:
 
 jobs:
