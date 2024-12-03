@@ -60,7 +60,7 @@ security definer
 as $$
 begin
     -- 既存のデータを削除
-    DELETE FROM xrpl_rich_list_changes;
+    DELETE FROM xrpl_rich_list_changes WHERE TRUE;
     
     -- 新しいデータを挿入
     WITH current_totals AS (
