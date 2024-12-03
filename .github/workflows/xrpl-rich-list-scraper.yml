@@ -28,3 +28,9 @@ jobs:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       run: python xrpl_rich_list_loader.py
+
+    - name: Trigger Cloudflare Build Hook
+      run: |
+        curl -X POST "https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/${CLOUDFLARE_DEPLOY_HOOK}"
+      env:
+        CLOUDFLARE_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_DEPLOY_HOOK }}
