@@ -31,18 +31,22 @@ CREATE TABLE xrpl_rich_list_summary (
 CREATE INDEX idx_summary_created_at ON xrpl_rich_list_summary(created_at);
 CREATE INDEX idx_summary_grouped_label ON xrpl_rich_list_summary(grouped_label);
 
+-- テーブル定義
 CREATE TABLE xrpl_rich_list_changes (
     id SERIAL PRIMARY KEY,
     grouped_label VARCHAR(255),
-    period_days INTEGER,  -- 1, 7, 30, etc.
+    hours INTEGER,  -- 1, 3, 6, 24, 168, 720 etc.
     balance_change NUMERIC,
     percentage_change NUMERIC,
     calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- インデックス
 CREATE INDEX idx_changes_label ON xrpl_rich_list_changes(grouped_label);
 CREATE INDEX idx_changes_calculated_at ON xrpl_rich_list_changes(calculated_at);
+CREATE INDEX idx_changes_hours ON xrpl_rich_list_changes(hours);
 
+-- ビュー定義
 CREATE VIEW xrpl_rich_list_summary_with_changes AS
 WITH latest_summary AS (
     SELECT *
@@ -56,20 +60,35 @@ WITH latest_summary AS (
 )
 SELECT 
     s.*,
-    d1.balance_change as change_1d,
-    d1.percentage_change as percentage_1d,
-    d7.balance_change as change_7d,
-    d7.percentage_change as percentage_7d,
-    d30.balance_change as change_30d,
-    d30.percentage_change as percentage_30d
+    h1.balance_change as change_1h,
+    h1.percentage_change as percentage_1h,
+    h3.balance_change as change_3h,
+    h3.percentage_change as percentage_3h,
+    h6.balance_change as change_6h,
+    h6.percentage_change as percentage_6h,
+    h24.balance_change as change_24h,
+    h24.percentage_change as percentage_24h,
+    h168.balance_change as change_168h,
+    h168.percentage_change as percentage_168h,
+    h720.balance_change as change_720h,
+    h720.percentage_change as percentage_720h
 FROM latest_summary s
-LEFT JOIN xrpl_rich_list_changes d1 
-    ON s.grouped_label = d1.grouped_label 
-    AND d1.period_days = 1
-LEFT JOIN xrpl_rich_list_changes d7
-    ON s.grouped_label = d7.grouped_label 
-    AND d7.period_days = 7
-LEFT JOIN xrpl_rich_list_changes d30
-    ON s.grouped_label = d30.grouped_label 
-    AND d30.period_days = 30
+LEFT JOIN xrpl_rich_list_changes h1 
+    ON s.grouped_label = h1.grouped_label 
+    AND h1.hours = 1
+LEFT JOIN xrpl_rich_list_changes h3
+    ON s.grouped_label = h3.grouped_label 
+    AND h3.hours = 3
+LEFT JOIN xrpl_rich_list_changes h6
+    ON s.grouped_label = h6.grouped_label 
+    AND h6.hours = 6
+LEFT JOIN xrpl_rich_list_changes h24
+    ON s.grouped_label = h24.grouped_label 
+    AND h24.hours = 24
+LEFT JOIN xrpl_rich_list_changes h168
+    ON s.grouped_label = h168.grouped_label 
+    AND h168.hours = 168
+LEFT JOIN xrpl_rich_list_changes h720
+    ON s.grouped_label = h720.grouped_label 
+    AND h720.hours = 720
 ORDER BY s.total_xrp DESC;
