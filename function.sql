@@ -79,24 +79,30 @@ BEGIN
     period_changes AS (
         SELECT 
             c.grouped_label,
-            -- 1時間の変化
-            c.total_xrp - COALESCE(h1.total_xrp, c.total_xrp) as hour_1_change,
+            -- 2時間の変化
+            c.total_xrp - COALESCE(h2.total_xrp, c.total_xrp) as hour_2_change,
             CASE 
-                WHEN COALESCE(h1.total_xrp, c.total_xrp) = 0 THEN 0
-                ELSE ((c.total_xrp - COALESCE(h1.total_xrp, c.total_xrp)) / COALESCE(h1.total_xrp, c.total_xrp) * 100)
-            END as hour_1_percentage,
-            -- 3時間の変化
-            c.total_xrp - COALESCE(h3.total_xrp, c.total_xrp) as hour_3_change,
+                WHEN COALESCE(h2.total_xrp, c.total_xrp) = 0 THEN 0
+                ELSE ((c.total_xrp - COALESCE(h2.total_xrp, c.total_xrp)) / COALESCE(h2.total_xrp, c.total_xrp) * 100)
+            END as hour_2_percentage,
+            -- 4時間の変化
+            c.total_xrp - COALESCE(h4.total_xrp, c.total_xrp) as hour_4_change,
             CASE 
-                WHEN COALESCE(h3.total_xrp, c.total_xrp) = 0 THEN 0
-                ELSE ((c.total_xrp - COALESCE(h3.total_xrp, c.total_xrp)) / COALESCE(h3.total_xrp, c.total_xrp) * 100)
-            END as hour_3_percentage,
+                WHEN COALESCE(h4.total_xrp, c.total_xrp) = 0 THEN 0
+                ELSE ((c.total_xrp - COALESCE(h4.total_xrp, c.total_xrp)) / COALESCE(h4.total_xrp, c.total_xrp) * 100)
+            END as hour_4_percentage,
             -- 6時間の変化
             c.total_xrp - COALESCE(h6.total_xrp, c.total_xrp) as hour_6_change,
             CASE 
                 WHEN COALESCE(h6.total_xrp, c.total_xrp) = 0 THEN 0
                 ELSE ((c.total_xrp - COALESCE(h6.total_xrp, c.total_xrp)) / COALESCE(h6.total_xrp, c.total_xrp) * 100)
             END as hour_6_percentage,
+            -- 12時間の変化
+            c.total_xrp - COALESCE(h12.total_xrp, c.total_xrp) as hour_12_change,
+            CASE 
+                WHEN COALESCE(h12.total_xrp, c.total_xrp) = 0 THEN 0
+                ELSE ((c.total_xrp - COALESCE(h12.total_xrp, c.total_xrp)) / COALESCE(h12.total_xrp, c.total_xrp) * 100)
+            END as hour_12_percentage,
             -- 24時間の変化
             c.total_xrp - COALESCE(h24.total_xrp, c.total_xrp) as hour_24_change,
             CASE 
@@ -116,23 +122,23 @@ BEGIN
                 ELSE ((c.total_xrp - COALESCE(h720.total_xrp, c.total_xrp)) / COALESCE(h720.total_xrp, c.total_xrp) * 100)
             END as hour_720_percentage
         FROM current_totals c
-        -- 1時間前のデータ
-        LEFT JOIN xrpl_rich_list_summary h1 ON 
-            c.grouped_label = h1.grouped_label AND 
-            h1.created_at = (
+        -- 2時間前のデータ
+        LEFT JOIN xrpl_rich_list_summary h2 ON 
+            c.grouped_label = h2.grouped_label AND 
+            h2.created_at = (
                 SELECT created_at 
                 FROM xrpl_rich_list_summary 
-                WHERE created_at <= c.created_at - INTERVAL '1 hour'
+                WHERE created_at <= c.created_at - INTERVAL '2 hours'
                 ORDER BY created_at DESC 
                 LIMIT 1
             )
-        -- 3時間前のデータ
-        LEFT JOIN xrpl_rich_list_summary h3 ON 
-            c.grouped_label = h3.grouped_label AND 
-            h3.created_at = (
+        -- 4時間前のデータ
+        LEFT JOIN xrpl_rich_list_summary h4 ON 
+            c.grouped_label = h4.grouped_label AND 
+            h4.created_at = (
                 SELECT created_at 
                 FROM xrpl_rich_list_summary 
-                WHERE created_at <= c.created_at - INTERVAL '3 hours'
+                WHERE created_at <= c.created_at - INTERVAL '4 hours'
                 ORDER BY created_at DESC 
                 LIMIT 1
             )
@@ -143,6 +149,16 @@ BEGIN
                 SELECT created_at 
                 FROM xrpl_rich_list_summary 
                 WHERE created_at <= c.created_at - INTERVAL '6 hours'
+                ORDER BY created_at DESC 
+                LIMIT 1
+            )
+        -- 12時間前のデータ
+        LEFT JOIN xrpl_rich_list_summary h12 ON 
+            c.grouped_label = h12.grouped_label AND 
+            h12.created_at = (
+                SELECT created_at 
+                FROM xrpl_rich_list_summary 
+                WHERE created_at <= c.created_at - INTERVAL '12 hours'
                 ORDER BY created_at DESC 
                 LIMIT 1
             )
@@ -181,17 +197,17 @@ BEGIN
         (grouped_label, hours, balance_change, percentage_change, calculated_at)
     SELECT 
         grouped_label,
-        1,
-        hour_1_change,
-        hour_1_percentage,
+        2,
+        hour_2_change,
+        hour_2_percentage,
         CURRENT_TIMESTAMP
     FROM period_changes
     UNION ALL
     SELECT 
         grouped_label,
-        3,
-        hour_3_change,
-        hour_3_percentage,
+        4,
+        hour_4_change,
+        hour_4_percentage,
         CURRENT_TIMESTAMP
     FROM period_changes
     UNION ALL
@@ -200,6 +216,14 @@ BEGIN
         6,
         hour_6_change,
         hour_6_percentage,
+        CURRENT_TIMESTAMP
+    FROM period_changes
+    UNION ALL
+    SELECT 
+        grouped_label,
+        12,
+        hour_12_change,
+        hour_12_percentage,
         CURRENT_TIMESTAMP
     FROM period_changes
     UNION ALL
@@ -238,7 +262,7 @@ as $$
 begin
     -- 古いデータの削除
     DELETE FROM xrpl_rich_list
-    WHERE snapshot_date < CURRENT_TIMESTAMP - INTERVAL '10 days';
+    WHERE snapshot_date < CURRENT_TIMESTAMP - INTERVAL '2 days';
     
     DELETE FROM xrpl_rich_list_summary
     WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '370 days';

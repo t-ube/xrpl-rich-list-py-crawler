@@ -35,7 +35,7 @@ CREATE INDEX idx_summary_grouped_label ON xrpl_rich_list_summary(grouped_label);
 CREATE TABLE xrpl_rich_list_changes (
     id SERIAL PRIMARY KEY,
     grouped_label VARCHAR(255),
-    hours INTEGER,  -- 1, 3, 6, 24, 168, 720 etc.
+    hours INTEGER,  -- 2, 4, 6, 12, 24, 168, 720
     balance_change NUMERIC,
     percentage_change NUMERIC,
     calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -60,12 +60,14 @@ WITH latest_summary AS (
 )
 SELECT 
     s.*,
-    h1.balance_change as change_1h,
-    h1.percentage_change as percentage_1h,
-    h3.balance_change as change_3h,
-    h3.percentage_change as percentage_3h,
+    h2.balance_change as change_2h,
+    h2.percentage_change as percentage_2h,
+    h4.balance_change as change_4h,
+    h4.percentage_change as percentage_4h,
     h6.balance_change as change_6h,
     h6.percentage_change as percentage_6h,
+    h12.balance_change as change_12h,
+    h12.percentage_change as percentage_12h,
     h24.balance_change as change_24h,
     h24.percentage_change as percentage_24h,
     h168.balance_change as change_168h,
@@ -73,15 +75,18 @@ SELECT
     h720.balance_change as change_720h,
     h720.percentage_change as percentage_720h
 FROM latest_summary s
-LEFT JOIN xrpl_rich_list_changes h1 
-    ON s.grouped_label = h1.grouped_label 
-    AND h1.hours = 1
-LEFT JOIN xrpl_rich_list_changes h3
-    ON s.grouped_label = h3.grouped_label 
-    AND h3.hours = 3
+LEFT JOIN xrpl_rich_list_changes h2 
+    ON s.grouped_label = h2.grouped_label 
+    AND h2.hours = 2
+LEFT JOIN xrpl_rich_list_changes h4
+    ON s.grouped_label = h4.grouped_label 
+    AND h4.hours = 4
 LEFT JOIN xrpl_rich_list_changes h6
     ON s.grouped_label = h6.grouped_label 
     AND h6.hours = 6
+LEFT JOIN xrpl_rich_list_changes h12
+    ON s.grouped_label = h12.grouped_label 
+    AND h12.hours = 12
 LEFT JOIN xrpl_rich_list_changes h24
     ON s.grouped_label = h24.grouped_label 
     AND h24.hours = 24
