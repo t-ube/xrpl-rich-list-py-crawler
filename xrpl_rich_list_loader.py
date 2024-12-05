@@ -3,6 +3,8 @@ import sys
 from datetime import datetime, timezone
 import time
 import csv
+import asyncio
+import json
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +16,9 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 from supabase import create_client
+from xrpl.clients import JsonRpcClient
+from xrpl.models import AccountInfo, AccountObjects
+from xrpl.asyncio.clients import AsyncJsonRpcClient
 
 @dataclass
 class RichListEntry:
@@ -126,6 +131,154 @@ class XRPLRichListScraper:
             return False
         finally:
             self.driver.quit()
+
+class XRPLBalanceValidator:
+    def __init__(self, node_url="wss://s1.ripple.com"):
+        self.node_url = node_url
+        self.client = None
+
+    async def setup_client(self):
+        self.client = AsyncJsonRpcClient(self.node_url)
+
+    async def cleanup_client(self):
+        if self.client and hasattr(self.client, '_client'):
+            await self.client._client.close()
+        self.client = None
+
+    async def get_account_info(self, address: str) -> tuple[float, float]:
+        try:
+            balance_response = await self.client.request(AccountInfo(
+                account=address,
+                ledger_index="validated"
+            ))
+            
+            try:
+                response_dict = balance_response.to_dict()
+                
+                if (isinstance(response_dict, dict) and 
+                    response_dict.get('status') == 'success' and 
+                    'result' in response_dict and 
+                    'account_data' in response_dict['result'] and 
+                    'Balance' in response_dict['result']['account_data']):
+                    
+                    balance = float(response_dict['result']['account_data']['Balance']) / 1000000
+                    escrow_balance = await self.get_escrow_info(address)
+                    return balance, escrow_balance
+                
+                print(f"Account {address} may not exist or is not accessible")
+                return 0.0, 0.0
+                    
+            except Exception as e:
+                print(f"Error processing response for {address}: {e}")
+                return 0.0, 0.0
+                
+        except Exception as e:
+            print(f"Error fetching balance for {address}: {str(e)}")
+            return 0.0, 0.0
+
+    async def get_escrow_info(self, address: str) -> float:
+        try:
+            response = await self.client.request(AccountObjects(
+                account=address,
+                type="escrow",
+                ledger_index="validated"
+            ))
+            
+            try:
+                response_dict = response.to_dict()
+                
+                if (isinstance(response_dict, dict) and 
+                    response_dict.get('status') == 'success' and 
+                    'result' in response_dict and 
+                    'account_objects' in response_dict['result']):
+                    
+                    escrows = response_dict['result']['account_objects']
+                    return sum(
+                        float(escrow['Amount']) / 1000000 
+                        for escrow in escrows 
+                        if isinstance(escrow, dict) and 'Amount' in escrow
+                    )
+                
+                return 0.0
+                    
+            except Exception as e:
+                print(f"Error processing escrow response for {address}: {e}")
+                return 0.0
+                
+        except Exception as e:
+            print(f"Error fetching escrow for {address}: {str(e)}")
+            return 0.0
+
+    async def validate_balances(self, csv_path: str, batch_size: int = 19):
+        print("Starting balance validation...")
+        temp_path = f"{csv_path}.temp"
+        
+        try:
+            await self.setup_client()
+            
+            entries = []
+            with open(csv_path, 'r', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                entries = list(reader)
+
+            total = len(entries)
+            processed = 0
+            verified_count = 0
+            
+            with open(temp_path, 'w', newline='', encoding='utf-8') as tempfile:
+                fieldnames = ['rank', 'address', 'label', 'balance_xrp', 'escrow_xrp', 'percentage', 'snapshot_date']
+                writer = csv.DictWriter(tempfile, fieldnames=fieldnames)
+                writer.writeheader()
+
+                for i in range(0, total, batch_size):
+                    batch = entries[i:i + batch_size]
+                    tasks = []
+                    
+                    for entry in batch:
+                        tasks.append(self.get_account_info(entry['address']))
+                    
+                    try:
+                        results = await asyncio.gather(*tasks, return_exceptions=True)
+                        
+                        for entry, result in zip(batch, results):
+                            if isinstance(result, Exception) or result == (0.0, 0.0):
+                                print(f"Could not verify {entry['address']}, keeping original values")
+                                writer.writerow(entry)
+                            else:
+                                balance, escrow = result
+                                if balance > 0 or escrow > 0:
+                                    entry['balance_xrp'] = balance
+                                    entry['escrow_xrp'] = escrow
+                                    verified_count += 1
+                                writer.writerow(entry)
+                        
+                        processed += len(batch)
+                        if processed % 100 == 0:
+                            print(f"Processed {processed}/{total} entries ({(processed/total)*100:.1f}%)")
+                            print(f"Successfully verified: {verified_count} addresses")
+                        
+                    except Exception as e:
+                        print(f"Error processing batch: {e}")
+                        for entry in batch:
+                            writer.writerow(entry)
+                        continue
+                    
+                    if i + batch_size < total:
+                        await asyncio.sleep(2)  # 待機時間も2秒
+
+                os.replace(temp_path, csv_path)
+                print(f"\nBalance validation completed:")
+                print(f"Total processed: {total}")
+                print(f"Successfully verified: {verified_count}")
+                print(f"Unverified/kept original: {total - verified_count}")
+                
+        except Exception as e:
+            print(f"Error during balance validation: {e}")
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise
+        finally:
+            await self.cleanup_client()
 
 class SupabaseUploader:
     def __init__(self):
@@ -259,47 +412,68 @@ class SupabaseUploader:
             print(f"Error cleaning up old data: {e}")
             return False
 
-def main():
-    try:
-        # 一時的なCSVファイルのパスを設定
+class RichListProcessor:
+    def __init__(self):
+        self.validator = XRPLBalanceValidator()
+        self.scraper = XRPLRichListScraper()
+        self.uploader = None
+
+    async def process(self):
         temp_csv_path = "rich_list_temp.csv"
         
-        # スクレイピングを実行
-        print("Starting scraping process...")
-        scraper = XRPLRichListScraper()
-        if not scraper.scrape_to_csv(temp_csv_path):
-            raise Exception("Scraping failed")
-        
-        # Supabaseにアップロード
-        print("Starting Supabase upload...")
-        uploader = SupabaseUploader()
-        if not uploader.upload_from_csv(temp_csv_path):
-            raise Exception("Upload to Supabase failed")
-
-        # サマリーテーブルを更新
-        print("Updating summary table...")
-        if not uploader.update_summary_table():
-            raise Exception("Summary table update failed")
-        
-        # 残高変化を計算
-        print("Calculating balance changes...")
-        if not uploader.update_balance_changes():
-            raise Exception("Balance changes calculation failed")
-        
-        # 古いデータを削除
-        print("Cleaning up old data...")
-        if not uploader.cleanup_old_data():
-            raise Exception("Data cleanup failed")
-        
-        # 一時ファイルを削除
         try:
-            os.remove(temp_csv_path)
-            print("Temporary CSV file cleaned up")
+            # スクレイピング
+            print("Starting scraping process...")
+            if not self.scraper.scrape_to_csv(temp_csv_path):
+                raise Exception("Scraping failed")
+
+            # バランス検証
+            print("\nStarting full validation...")
+            await self.validator.validate_balances(temp_csv_path)
+
+            # Supabaseアップロード
+            print("Starting Supabase upload...")
+            self.uploader = SupabaseUploader()
+            if not self.uploader.upload_from_csv(temp_csv_path):
+                raise Exception("Upload to Supabase failed")
+
+            print("Updating summary table...")
+            if not self.uploader.update_summary_table():
+                raise Exception("Summary table update failed")
+            
+            print("Calculating balance changes...")
+            if not self.uploader.update_balance_changes():
+                raise Exception("Balance changes calculation failed")
+            
+            print("Cleaning up old data...")
+            if not self.uploader.cleanup_old_data():
+                raise Exception("Data cleanup failed")
+
+            # 一時ファイルのクリーンアップ
+            try:
+                os.remove(temp_csv_path)
+                print("Temporary CSV file cleaned up")
+            except Exception as e:
+                print(f"Warning: Could not delete temporary CSV file: {e}")
+
+            print("Process completed successfully")
+            
         except Exception as e:
-            print(f"Warning: Could not delete temporary CSV file: {e}")
-        
-        print("Process completed successfully")
-        
+            print(f"Error during processing: {e}")
+            if os.path.exists(temp_csv_path):
+                try:
+                    os.remove(temp_csv_path)
+                except:
+                    pass
+            raise
+
+def main():
+    """
+    メインエントリーポイント
+    """
+    try:
+        processor = RichListProcessor()
+        asyncio.run(processor.process())
     except Exception as e:
         print(f"Fatal error: {e}")
         sys.exit(1)

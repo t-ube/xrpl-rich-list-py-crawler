@@ -8,7 +8,7 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
 
     # 同時実行を防止
     concurrency:
@@ -26,7 +26,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install selenium supabase
+        pip install selenium supabase xrpl-py aiohttp websockets
 
     - name: Run scraper
       env:
