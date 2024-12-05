@@ -43,7 +43,6 @@ class XRPLRichListScraper:
         try:
             wait = WebDriverWait(self.driver, 40)
             
-            """
             select_element = wait.until(EC.presence_of_element_located(
                 (By.CSS_SELECTOR, "select#formGroupPage")))
             select = Select(select_element)
@@ -51,7 +50,6 @@ class XRPLRichListScraper:
             print("Changed display count to 10000 entries")
             
             time.sleep(10)
-            """
 
             table_header = wait.until(EC.presence_of_element_located(
                 (By.XPATH, "//th[contains(text(), 'Top 10,000 XRP balances')]")))
@@ -289,7 +287,10 @@ class SupabaseUploader:
         if not supabase_url or not supabase_key:
             raise ValueError("Supabase credentials not found in environment variables")
         
-        self.supabase = create_client(supabase_url, supabase_key)
+        self.supabase = create_client(
+            supabase_url=supabase_url,
+            supabase_key=supabase_key
+        )
         self._test_connection()
 
     def _test_connection(self):
@@ -496,7 +497,7 @@ def main():
     メインエントリーポイント
     """
     processor = RichListProcessor()
-    success_a = False
+    success_a = True
 
     try:
         # process_aを実行し、成功したらフラグを立てる
