@@ -41,7 +41,6 @@ class XRPLRichListScraper:
         try:
             wait = WebDriverWait(self.driver, 40)
             
-            """
             select_element = wait.until(EC.presence_of_element_located(
                 (By.CSS_SELECTOR, "select#formGroupPage")))
             select = Select(select_element)
@@ -49,7 +48,6 @@ class XRPLRichListScraper:
             print("Changed display count to 10000 entries")
             
             time.sleep(10)
-            """
 
             table_header = wait.until(EC.presence_of_element_located(
                 (By.XPATH, "//th[contains(text(), 'Top 10,000 XRP balances')]")))
