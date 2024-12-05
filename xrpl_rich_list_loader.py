@@ -420,7 +420,7 @@ class RichListProcessor:
         self.scraper = XRPLRichListScraper()
         self.uploader = None
 
-    async def process(self):
+    async def process_a(self):
         temp_csv_path = "rich_list_temp.csv"
         
         try:
@@ -430,8 +430,30 @@ class RichListProcessor:
                 raise Exception("Scraping failed")
 
             # バランス検証
-            #print("\nStarting full validation...")
-            #await self.validator.validate_balances(temp_csv_path)
+            print("\nStarting full validation...")
+            await self.validator.validate_balances(temp_csv_path)
+
+            # 一時ファイルのクリーンアップ
+            try:
+                print("Temporary CSV file cleaned up")
+            except Exception as e:
+                print(f"Warning: Could not delete temporary CSV file: {e}")
+
+            print("Process completed successfully")
+            
+        except Exception as e:
+            print(f"Error during processing: {e}")
+            if os.path.exists(temp_csv_path):
+                try:
+                    os.remove(temp_csv_path)
+                except:
+                    pass
+            raise
+
+    def process_b(self):
+        temp_csv_path = "rich_list_temp.csv"
+        
+        try:
 
             # Supabaseアップロード
             print("Starting Supabase upload...")
@@ -439,7 +461,6 @@ class RichListProcessor:
             if not self.uploader.upload_from_csv(temp_csv_path):
                 raise Exception("Upload to Supabase failed")
 
-            """
             print("Updating summary table...")
             if not self.uploader.update_summary_table():
                 raise Exception("Summary table update failed")
@@ -451,7 +472,6 @@ class RichListProcessor:
             print("Cleaning up old data...")
             if not self.uploader.cleanup_old_data():
                 raise Exception("Data cleanup failed")
-            """
 
             # 一時ファイルのクリーンアップ
             try:
@@ -475,12 +495,24 @@ def main():
     """
     メインエントリーポイント
     """
+    processor = RichListProcessor()
+    success_a = False
+
     try:
-        processor = RichListProcessor()
-        asyncio.run(processor.process())
+        # process_aを実行し、成功したらフラグを立てる
+        asyncio.run(processor.process_a())
+        success_a = True
     except Exception as e:
-        print(f"Fatal error: {e}")
+        print(f"Fatal error in process_a: {e}")
         sys.exit(1)
+
+    # process_aが成功した場合のみprocess_bを実行
+    if success_a:
+        try:
+            processor.process_b()
+        except Exception as e:
+            print(f"Fatal error in process_b: {e}")
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()
