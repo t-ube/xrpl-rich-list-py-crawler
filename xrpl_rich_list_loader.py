@@ -50,7 +50,7 @@ class XRPLRichListScraper:
             print("Changed display count to 10000 entries")
             
             time.sleep(10)
-            
+
             table_header = wait.until(EC.presence_of_element_located(
                 (By.XPATH, "//th[contains(text(), 'Top 10,000 XRP balances')]")))
             print("Rich list table header found")
@@ -209,7 +209,7 @@ class XRPLBalanceValidator:
             print(f"Error fetching escrow for {address}: {str(e)}")
             return 0.0
 
-    async def validate_balances(self, csv_path: str, batch_size: int = 19):
+    async def validate_balances(self, csv_path: str, batch_size: int = 16):
         print("Starting balance validation...")
         temp_path = f"{csv_path}.temp"
         
