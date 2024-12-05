@@ -8,7 +8,7 @@ on:
 jobs:
   scrape-and-upload:
     runs-on: ubuntu-latest
-    timeout-minutes: 115
+    timeout-minutes: 59
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
