@@ -43,6 +43,7 @@ class XRPLRichListScraper:
         try:
             wait = WebDriverWait(self.driver, 40)
             
+            """
             select_element = wait.until(EC.presence_of_element_located(
                 (By.CSS_SELECTOR, "select#formGroupPage")))
             select = Select(select_element)
@@ -50,6 +51,7 @@ class XRPLRichListScraper:
             print("Changed display count to 10000 entries")
             
             time.sleep(10)
+            """
 
             table_header = wait.until(EC.presence_of_element_located(
                 (By.XPATH, "//th[contains(text(), 'Top 10,000 XRP balances')]")))
@@ -427,12 +429,12 @@ class RichListProcessor:
         try:
             # スクレイピング
             print("Starting scraping process...")
-            if not self.scraper.scrape_to_csv(temp_csv_path):
-                raise Exception("Scraping failed")
+            #if not self.scraper.scrape_to_csv(temp_csv_path):
+            #    raise Exception("Scraping failed")
 
             # バランス検証
-            print("\nStarting full validation...")
-            await self.validator.validate_balances(temp_csv_path)
+            #print("\nStarting full validation...")
+            #await self.validator.validate_balances(temp_csv_path)
 
             # 一時ファイルのクリーンアップ
             try:
@@ -459,9 +461,10 @@ class RichListProcessor:
             # Supabaseアップロード
             print("Starting Supabase upload...")
             self.uploader = SupabaseUploader()
-            if not self.uploader.upload_from_csv(temp_csv_path):
-                raise Exception("Upload to Supabase failed")
+            #if not self.uploader.upload_from_csv(temp_csv_path):
+            #    raise Exception("Upload to Supabase failed")
 
+            """
             print("Updating summary table...")
             if not self.uploader.update_summary_table():
                 raise Exception("Summary table update failed")
@@ -480,14 +483,15 @@ class RichListProcessor:
                 print("Temporary CSV file cleaned up")
             except Exception as e:
                 print(f"Warning: Could not delete temporary CSV file: {e}")
-
+            """
             print("Process completed successfully")
             
         except Exception as e:
             print(f"Error during processing: {e}")
             if os.path.exists(temp_csv_path):
                 try:
-                    os.remove(temp_csv_path)
+                    #os.remove(temp_csv_path)
+                    pass
                 except:
                     pass
             raise
