@@ -433,11 +433,6 @@ class RichListProcessor:
             #print("\nStarting full validation...")
             #await self.validator.validate_balances(temp_csv_path)
 
-            if 'HTTPS_PROXY' in os.environ:
-                del os.environ['HTTPS_PROXY']
-            if 'HTTP_PROXY' in os.environ:
-                del os.environ['HTTP_PROXY']
-
             # Supabaseアップロード
             print("Starting Supabase upload...")
             self.uploader = SupabaseUploader()

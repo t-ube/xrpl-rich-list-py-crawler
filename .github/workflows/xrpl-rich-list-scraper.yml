@@ -29,8 +29,6 @@ jobs:
         pip install selenium
         pip install supabase
         pip install xrpl-py
-        pip install aiohttp
-        pip install websockets
 
     - name: Run scraper
       env:
