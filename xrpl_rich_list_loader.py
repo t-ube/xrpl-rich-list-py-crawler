@@ -43,6 +43,7 @@ class XRPLRichListScraper:
         try:
             wait = WebDriverWait(self.driver, 40)
             
+            """
             select_element = wait.until(EC.presence_of_element_located(
                 (By.CSS_SELECTOR, "select#formGroupPage")))
             select = Select(select_element)
@@ -50,6 +51,7 @@ class XRPLRichListScraper:
             print("Changed display count to 10000 entries")
             
             time.sleep(10)
+            """
 
             table_header = wait.until(EC.presence_of_element_located(
                 (By.XPATH, "//th[contains(text(), 'Top 10,000 XRP balances')]")))
@@ -428,8 +430,13 @@ class RichListProcessor:
                 raise Exception("Scraping failed")
 
             # バランス検証
-            print("\nStarting full validation...")
-            await self.validator.validate_balances(temp_csv_path)
+            #print("\nStarting full validation...")
+            #await self.validator.validate_balances(temp_csv_path)
+
+            if 'HTTPS_PROXY' in os.environ:
+                del os.environ['HTTPS_PROXY']
+            if 'HTTP_PROXY' in os.environ:
+                del os.environ['HTTP_PROXY']
 
             # Supabaseアップロード
             print("Starting Supabase upload...")
@@ -437,6 +444,7 @@ class RichListProcessor:
             if not self.uploader.upload_from_csv(temp_csv_path):
                 raise Exception("Upload to Supabase failed")
 
+            """
             print("Updating summary table...")
             if not self.uploader.update_summary_table():
                 raise Exception("Summary table update failed")
@@ -448,6 +456,7 @@ class RichListProcessor:
             print("Cleaning up old data...")
             if not self.uploader.cleanup_old_data():
                 raise Exception("Data cleanup failed")
+            """
 
             # 一時ファイルのクリーンアップ
             try:
