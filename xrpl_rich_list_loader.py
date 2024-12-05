@@ -497,7 +497,7 @@ def main():
     メインエントリーポイント
     """
     processor = RichListProcessor()
-    success_a = True
+    success_a = False
 
     try:
         # process_aを実行し、成功したらフラグを立てる
