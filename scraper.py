@@ -132,9 +132,11 @@ class XRPLRichListScraper:
 
 
 class XRPLBalanceValidator:
-    def __init__(self, node_url="wss://s1.ripple.com"):
+    def __init__(self, node_url="wss://s1.ripple.com", max_retries=2, retry_delay=1):
         self.node_url = node_url
         self.client = None
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
 
     async def setup_client(self):
         self.client = AsyncJsonRpcClient(self.node_url)
@@ -145,68 +147,97 @@ class XRPLBalanceValidator:
         self.client = None
 
     async def get_account_info(self, address: str) -> Tuple[Optional[float], Optional[float]]:
-        try:
-            balance_response = await self.client.request(AccountInfo(
-                account=address,
-                ledger_index="validated"
-            ))
-            
+        for attempt in range(self.max_retries + 1):
             try:
-                response_dict = balance_response.to_dict()
+                balance_response = await self.client.request(AccountInfo(
+                    account=address,
+                    ledger_index="validated"
+                ))
                 
-                if (isinstance(response_dict, dict) and 
-                    response_dict.get('status') == 'success' and 
-                    'result' in response_dict and 
-                    'account_data' in response_dict['result'] and 
-                    'Balance' in response_dict['result']['account_data']):
+                try:
+                    response_dict = balance_response.to_dict()
                     
-                    balance = float(response_dict['result']['account_data']['Balance']) / 1000000
-                    escrow_balance = await self.get_escrow_info(address)
-                    return balance, escrow_balance
-                
-                print(f"Account {address} may not exist or is not accessible")
-                return None, None
+                    if (isinstance(response_dict, dict) and 
+                        response_dict.get('status') == 'success' and 
+                        'result' in response_dict and 
+                        'account_data' in response_dict['result'] and 
+                        'Balance' in response_dict['result']['account_data']):
+                        
+                        balance = float(response_dict['result']['account_data']['Balance']) / 1000000
+                        escrow_balance = await self.get_escrow_info(address)
+                        if escrow_balance is not None:  # エスクロー取得に成功した場合のみ結果を返す
+                            return balance, escrow_balance
+                        
+                    if attempt < self.max_retries:
+                        print(f"Retry {attempt + 1}/{self.max_retries} for account {address}")
+                        await asyncio.sleep(self.retry_delay)
+                        continue
+                    
+                    print(f"Account {address} may not exist or is not accessible")
+                    return None, None
+                        
+                except Exception as e:
+                    if attempt < self.max_retries:
+                        print(f"Retry {attempt + 1}/{self.max_retries} for account {address} due to error: {e}")
+                        await asyncio.sleep(self.retry_delay)
+                        continue
+                    print(f"Error processing response for {address}: {e}")
+                    return None, None
                     
             except Exception as e:
-                print(f"Error processing response for {address}: {e}")
+                if attempt < self.max_retries:
+                    print(f"Retry {attempt + 1}/{self.max_retries} for account {address} due to error: {e}")
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+                print(f"Error fetching balance for {address}: {str(e)}")
                 return None, None
-                
-        except Exception as e:
-            print(f"Error fetching balance for {address}: {str(e)}")
-            return None, None
 
     async def get_escrow_info(self, address: str) -> Optional[float]:
-        try:
-            response = await self.client.request(AccountObjects(
-                account=address,
-                type="escrow",
-                ledger_index="validated"
-            ))
-            
+        for attempt in range(self.max_retries + 1):
             try:
-                response_dict = response.to_dict()
+                response = await self.client.request(AccountObjects(
+                    account=address,
+                    type="escrow",
+                    ledger_index="validated"
+                ))
                 
-                if (isinstance(response_dict, dict) and 
-                    response_dict.get('status') == 'success' and 
-                    'result' in response_dict and 
-                    'account_objects' in response_dict['result']):
+                try:
+                    response_dict = response.to_dict()
                     
-                    escrows = response_dict['result']['account_objects']
-                    return sum(
-                        float(escrow['Amount']) / 1000000 
-                        for escrow in escrows 
-                        if isinstance(escrow, dict) and 'Amount' in escrow
-                    )
-                
-                return None
+                    if (isinstance(response_dict, dict) and 
+                        response_dict.get('status') == 'success' and 
+                        'result' in response_dict and 
+                        'account_objects' in response_dict['result']):
+                        
+                        escrows = response_dict['result']['account_objects']
+                        return sum(
+                            float(escrow['Amount']) / 1000000 
+                            for escrow in escrows 
+                            if isinstance(escrow, dict) and 'Amount' in escrow
+                        )
+
+                    if attempt < self.max_retries:
+                        print(f"Retry {attempt + 1}/{self.max_retries} for escrow {address}")
+                        await asyncio.sleep(self.retry_delay)
+                        continue
+                    
+                    return None
+                        
+                except Exception as e:
+                    if attempt < self.max_retries:
+                        print(f"Retry {attempt + 1}/{self.max_retries} for escrow {address} due to error: {e}")
+                        await asyncio.sleep(self.retry_delay)
+                        continue
+                    print(f"Error processing escrow response for {address}: {e}")
+                    return None
                     
             except Exception as e:
-                print(f"Error processing escrow response for {address}: {e}")
+                if attempt < self.max_retries:
+                    print(f"Retry {attempt + 1}/{self.max_retries} for escrow {address} due to error: {e}")
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+                print(f"Error fetching escrow for {address}: {str(e)}")
                 return None
-                
-        except Exception as e:
-            print(f"Error fetching escrow for {address}: {str(e)}")
-            return None
 
     async def validate_balances(self, csv_path: str, batch_size: int = 16):
         print("Starting balance validation...")
