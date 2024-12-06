@@ -144,7 +144,7 @@ class XRPLBalanceValidator:
             await self.client._client.close()
         self.client = None
 
-    async def get_account_info(self, address: str) -> tuple[float, float]:
+    async def get_account_info(self, address: str) -> Tuple[Optional[float], Optional[float]]:
         try:
             balance_response = await self.client.request(AccountInfo(
                 account=address,
@@ -165,17 +165,17 @@ class XRPLBalanceValidator:
                     return balance, escrow_balance
                 
                 print(f"Account {address} may not exist or is not accessible")
-                return 0.0, 0.0
+                return None, None
                     
             except Exception as e:
                 print(f"Error processing response for {address}: {e}")
-                return 0.0, 0.0
+                return None, None
                 
         except Exception as e:
             print(f"Error fetching balance for {address}: {str(e)}")
-            return 0.0, 0.0
+            return None, None
 
-    async def get_escrow_info(self, address: str) -> float:
+    async def get_escrow_info(self, address: str) -> Optional[float]:
         try:
             response = await self.client.request(AccountObjects(
                 account=address,
@@ -198,15 +198,15 @@ class XRPLBalanceValidator:
                         if isinstance(escrow, dict) and 'Amount' in escrow
                     )
                 
-                return 0.0
+                return None
                     
             except Exception as e:
                 print(f"Error processing escrow response for {address}: {e}")
-                return 0.0
+                return None
                 
         except Exception as e:
             print(f"Error fetching escrow for {address}: {str(e)}")
-            return 0.0
+            return None
 
     async def validate_balances(self, csv_path: str, batch_size: int = 16):
         print("Starting balance validation...")
@@ -240,16 +240,19 @@ class XRPLBalanceValidator:
                         results = await asyncio.gather(*tasks, return_exceptions=True)
                         
                         for entry, result in zip(batch, results):
-                            if isinstance(result, Exception) or result == (0.0, 0.0):
+                            if isinstance(result, Exception):
                                 print(f"Could not verify {entry['address']}, keeping original values")
                                 writer.writerow(entry)
                             else:
                                 balance, escrow = result
-                                if balance > 0 or escrow > 0:
+                                if balance is None or escrow is None:
+                                    print(f"Verification failed for {entry['address']}, keeping original values")
+                                    writer.writerow(entry)
+                                else:
                                     entry['balance_xrp'] = balance
                                     entry['escrow_xrp'] = escrow
                                     verified_count += 1
-                                writer.writerow(entry)
+                                    writer.writerow(entry)
                         
                         processed += len(batch)
                         if processed % 100 == 0:
@@ -263,7 +266,7 @@ class XRPLBalanceValidator:
                         continue
                     
                     if i + batch_size < total:
-                        await asyncio.sleep(2)  # 待機時間も2秒
+                        await asyncio.sleep(2)
 
                 os.replace(temp_path, csv_path)
                 print(f"\nBalance validation completed:")
