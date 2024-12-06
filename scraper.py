@@ -5,6 +5,7 @@ import time
 import csv
 import asyncio
 from typing import List, Dict
+from typing import Optional, Tuple
 from dataclasses import dataclass
 
 from selenium import webdriver
