@@ -41,6 +41,9 @@ class SupabaseUploader:
                 reader = csv.DictReader(csvfile)
                 
                 for row in reader:
+                    # exists を文字列の "True"/"False" から bool型に変換
+                    exists_value = str(row.get('exists', 'True')).lower() == 'true'
+                    
                     current_batch.append({
                         'rank': int(row['rank']),
                         'address': row['address'],
@@ -48,7 +51,8 @@ class SupabaseUploader:
                         'balance_xrp': float(row['balance_xrp']),
                         'escrow_xrp': float(row['escrow_xrp']),
                         'percentage': float(row['percentage']),
-                        'snapshot_date': row['snapshot_date']
+                        'snapshot_date': row['snapshot_date'],
+                        'exists': exists_value
                     })
                     
                     if len(current_batch) >= batch_size:

@@ -6,6 +6,7 @@ CREATE TABLE xrpl_rich_list (
     balance_xrp DECIMAL(20, 6),    -- XRPの残高
     escrow_xrp DECIMAL(20, 6),     -- エスクローのXRP残高
     percentage DECIMAL(6, 3),      -- 全体に対する保有割合（%）
+    exists BOOLEAN NOT NULL,       -- アカウントの存在状態
     snapshot_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     -- インデックス作成
@@ -16,6 +17,7 @@ CREATE TABLE xrpl_rich_list (
 CREATE INDEX idx_xrpl_rich_list_snapshot_date ON xrpl_rich_list(snapshot_date);
 CREATE INDEX idx_xrpl_rich_list_address ON xrpl_rich_list(address);
 CREATE INDEX idx_xrpl_rich_list_rank ON xrpl_rich_list(rank);
+CREATE INDEX idx_xrpl_rich_list_exists ON xrpl_rich_list(exists);
 
 
 CREATE TABLE xrpl_rich_list_summary (

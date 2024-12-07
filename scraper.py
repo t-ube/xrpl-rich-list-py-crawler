@@ -90,7 +90,7 @@ class XRPLRichListScraper:
             rows = table.find_elements(By.CSS_SELECTOR, "tbody tr")
             
             with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
-                fieldnames = ['rank', 'address', 'label', 'balance_xrp', 'escrow_xrp', 'percentage', 'snapshot_date']
+                fieldnames = ['rank', 'address', 'label', 'balance_xrp', 'escrow_xrp', 'percentage', 'snapshot_date', 'exists']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
                 
@@ -146,52 +146,6 @@ class XRPLBalanceValidator:
         if self.client and hasattr(self.client, '_client'):
             await self.client._client.close()
         self.client = None
-
-    async def get_account_info(self, address: str) -> Tuple[Optional[float], Optional[float]]:
-        for attempt in range(self.max_retries + 1):
-            try:
-                balance_response = await self.client.request(AccountInfo(
-                    account=address,
-                    ledger_index="validated"
-                ))
-                
-                try:
-                    response_dict = balance_response.to_dict()
-                    
-                    if (isinstance(response_dict, dict) and 
-                        response_dict.get('status') == 'success' and 
-                        'result' in response_dict and 
-                        'account_data' in response_dict['result'] and 
-                        'Balance' in response_dict['result']['account_data']):
-                        
-                        balance = float(response_dict['result']['account_data']['Balance']) / 1000000
-                        escrow_balance = await self.get_escrow_info(address)
-                        if escrow_balance is not None:  # エスクロー取得に成功した場合のみ結果を返す
-                            return balance, escrow_balance
-                        
-                    if attempt < self.max_retries:
-                        print(f"Retry {attempt + 1}/{self.max_retries} for account {address}")
-                        await asyncio.sleep(self.retry_delay)
-                        continue
-                    
-                    print(f"Account {address} may not exist or is not accessible")
-                    return None, None
-                        
-                except Exception as e:
-                    if attempt < self.max_retries:
-                        print(f"Retry {attempt + 1}/{self.max_retries} for account {address} due to error: {e}")
-                        await asyncio.sleep(self.retry_delay)
-                        continue
-                    print(f"Error processing response for {address}: {e}")
-                    return None, None
-                    
-            except Exception as e:
-                if attempt < self.max_retries:
-                    print(f"Retry {attempt + 1}/{self.max_retries} for account {address} due to error: {e}")
-                    await asyncio.sleep(self.retry_delay)
-                    continue
-                print(f"Error fetching balance for {address}: {str(e)}")
-                return None, None
 
     async def get_escrow_info(self, address: str) -> Optional[float]:
         for attempt in range(self.max_retries + 1):
@@ -257,7 +211,8 @@ class XRPLBalanceValidator:
             verified_count = 0
             
             with open(temp_path, 'w', newline='', encoding='utf-8') as tempfile:
-                fieldnames = ['rank', 'address', 'label', 'balance_xrp', 'escrow_xrp', 'percentage', 'snapshot_date']
+                # exists フィールドを追加
+                fieldnames = ['rank', 'address', 'label', 'balance_xrp', 'escrow_xrp', 'percentage', 'snapshot_date', 'exists']
                 writer = csv.DictWriter(tempfile, fieldnames=fieldnames)
                 writer.writeheader()
 
@@ -266,25 +221,29 @@ class XRPLBalanceValidator:
                     tasks = []
                     
                     for entry in batch:
-                        tasks.append(self.get_account_info(entry['address']))
+                        tasks.append(self.check_and_get_account_info(entry['address']))
                     
                     try:
                         results = await asyncio.gather(*tasks, return_exceptions=True)
                         
                         for entry, result in zip(batch, results):
                             if isinstance(result, Exception):
-                                print(f"Could not verify {entry['address']}, keeping original values")
+                                print(f"Error processing {entry['address']}: {result}")
+                                entry['exists'] = True  # エラーの場合は既存の値を保持
                                 writer.writerow(entry)
                             else:
-                                balance, escrow = result
-                                if balance is None or escrow is None:
-                                    print(f"Verification failed for {entry['address']}, keeping original values")
-                                    writer.writerow(entry)
-                                else:
+                                exists, balance, escrow = result
+                                if exists:
                                     entry['balance_xrp'] = balance
                                     entry['escrow_xrp'] = escrow
+                                    entry['exists'] = True
                                     verified_count += 1
-                                    writer.writerow(entry)
+                                else:
+                                    entry['balance_xrp'] = 0
+                                    entry['escrow_xrp'] = 0
+                                    entry['exists'] = False
+                                    print(f"Account {entry['address']} does not exist, setting balance to 0")
+                                writer.writerow(entry)
                         
                         processed += len(batch)
                         if processed % 100 == 0:
@@ -294,6 +253,7 @@ class XRPLBalanceValidator:
                     except Exception as e:
                         print(f"Error processing batch: {e}")
                         for entry in batch:
+                            entry['exists'] = True  # エラーの場合は既存の値を保持
                             writer.writerow(entry)
                         continue
                     
@@ -313,6 +273,52 @@ class XRPLBalanceValidator:
             raise
         finally:
             await self.cleanup_client()
+
+    async def check_and_get_account_info(self, address: str) -> Tuple[bool, Optional[float], Optional[float]]:
+        """アカウントの存在確認とバランス取得を行う"""
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = await self.client.request(AccountInfo(
+                    account=address,
+                    ledger_index="validated"
+                ))
+                
+                try:
+                    response_dict = response.to_dict()
+                    
+                    if (isinstance(response_dict, dict) and 
+                        response_dict.get('status') == 'success' and 
+                        'result' in response_dict and 
+                        'account_data' in response_dict['result'] and 
+                        'Balance' in response_dict['result']['account_data']):
+                        
+                        balance = float(response_dict['result']['account_data']['Balance']) / 1000000
+                        escrow_balance = await self.get_escrow_info(address)
+                        if escrow_balance is None:
+                            escrow_balance = 0
+                        return True, balance, escrow_balance
+                    
+                    if attempt < self.max_retries:
+                        print(f"Retry {attempt + 1}/{self.max_retries} for account {address}")
+                        await asyncio.sleep(self.retry_delay)
+                        continue
+                    
+                    print(f"Account {address} does not exist")
+                    return False, 0, 0
+                        
+                except Exception as e:
+                    if attempt < self.max_retries:
+                        print(f"Retry {attempt + 1}/{self.max_retries} for account {address} due to error: {e}")
+                        await asyncio.sleep(self.retry_delay)
+                        continue
+                    raise
+                    
+            except Exception as e:
+                if attempt < self.max_retries:
+                    print(f"Retry {attempt + 1}/{self.max_retries} for account {address} due to error: {e}")
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+                raise
 
 
 class RichListScrapeProcessor:
