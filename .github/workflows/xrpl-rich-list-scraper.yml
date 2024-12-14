@@ -31,7 +31,9 @@ jobs:
 
     # スクレイピング実行
     - name: Run scraper
-      run: python scraper.py
+      run: | 
+        python loader.py
+        python validator.py
 
     # スクレイピング用ライブラリをアンインストール
     - name: Uninstall scraper dependencies
