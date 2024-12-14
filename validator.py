@@ -185,7 +185,7 @@ class XRPLBalanceValidator:
 
 async def main():
     validator = XRPLBalanceValidator()
-    await validator.validate_balances("rich_list.csv")
+    await validator.validate_balances("rich_list_temp.csv")
 
 if __name__ == "__main__":
     asyncio.run(main())

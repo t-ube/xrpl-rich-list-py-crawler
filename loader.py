@@ -172,7 +172,7 @@ class XRPDataFetcher:
 
 async def main():
     fetcher = XRPDataFetcher()
-    await fetcher.save_to_csv("rich_list.csv")
+    await fetcher.save_to_csv("rich_list_temp.csv")
 
 if __name__ == "__main__":
     asyncio.run(main())
