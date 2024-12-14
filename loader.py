@@ -41,6 +41,15 @@ class XRPDataFetcher:
             name_data.get('twitter', '')
         )
 
+    def format_label(self, name: str, desc: str) -> str:
+        """Format label with name and description"""
+        if not name or name == "Unknown":
+            return "Unknown"
+            
+        if desc:
+            return f"{name} ({desc})"
+        return name
+
     async def get_rich_list(self) -> List[XRPAccount]:
         data = await self.fetch_data("balances")
         accounts = []
@@ -145,7 +154,7 @@ class XRPDataFetcher:
                     writer.writerow({
                         'rank': rank,
                         'address': account.account,
-                        'label': f"{account.name} {account.desc}".strip(),
+                        'label': self.format_label(account.name, account.desc),
                         'balance_xrp': account.balance,
                         'percentage': round(percentage, 6),
                         'domain': account.domain,
