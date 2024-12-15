@@ -14,6 +14,7 @@ class XRPAccount:
     domain: str = ""
     twitter: str = ""
     verified: bool = False
+    escrow_xrp: float = 0.0
 
 class XRPDataFetcher:
     def __init__(self):
@@ -132,16 +133,14 @@ class XRPDataFetcher:
             well_known = await self.get_well_known_accounts()
             print(f"Found {len(well_known)} well-known accounts")
             
-            # Merge and sort accounts
             print("Merging account data...")
             merged_accounts = self.merge_accounts(rich_list, well_known)
             
-            # Save to CSV
             snapshot_date = datetime.now(timezone.utc).isoformat()
             
             print(f"Saving data to {output_path}...")
             with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
-                fieldnames = ['rank', 'address', 'label', 'balance_xrp', 'percentage', 
+                fieldnames = ['rank', 'address', 'label', 'balance_xrp', 'escrow_xrp', 'percentage', 
                             'domain', 'twitter', 'verified', 'snapshot_date']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
@@ -156,6 +155,7 @@ class XRPDataFetcher:
                         'address': account.account,
                         'label': self.format_label(account.name, account.desc),
                         'balance_xrp': account.balance,
+                        'escrow_xrp': account.escrow_xrp,
                         'percentage': round(percentage, 6),
                         'domain': account.domain,
                         'twitter': account.twitter,
