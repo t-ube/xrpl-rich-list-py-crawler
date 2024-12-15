@@ -69,10 +69,15 @@ class XRPDataFetcher:
             # Safely handle the name field which might be None
             name_info = entry.get('name') or {}
             
+            # name.nameがある場合はそれを使用し、ない場合はusernameを試す
+            name = (name_info.get('name') or 
+                   (name_info.get('username') if isinstance(name_info, dict) else None) or 
+                   'Unknown')
+            
             account = XRPAccount(
                 account=entry['account'],
                 balance=self.convert_balance_to_xrp(entry['balance']),
-                name=name_info.get('name', 'Unknown'),
+                name=name,
                 desc=name_info.get('desc', ''),
                 domain=name_info.get('domain', ''),
                 twitter=name_info.get('twitter', '')
