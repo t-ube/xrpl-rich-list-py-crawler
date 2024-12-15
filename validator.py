@@ -1,180 +1,191 @@
-import aiohttp
 import asyncio
 import csv
-from datetime import datetime, timezone
-from typing import List, Dict, Set
+from typing import Optional, Tuple
 from dataclasses import dataclass
+import os
+
+from xrpl.asyncio.clients import AsyncJsonRpcClient
+from xrpl.models import AccountInfo, AccountObjects
 
 @dataclass
-class XRPAccount:
-    account: str
-    balance: float
-    name: str = "Unknown"
-    desc: str = ""
-    domain: str = ""
-    twitter: str = ""
-    verified: bool = False
+class ValidatedAccount:
+    address: str
+    balance_xrp: float
+    escrow_xrp: float
+    exists: bool
 
-class XRPDataFetcher:
-    def __init__(self):
-        self.base_url = "https://api.xrpscan.com/api/v1"
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Accept': 'application/json'
-        }
-        
-    async def fetch_data(self, endpoint: str) -> List[Dict]:
-        async with aiohttp.ClientSession(headers=self.headers) as session:
-            for attempt in range(3):  # 3回までリトライ
-                try:
-                    async with session.get(f"{self.base_url}/{endpoint}") as response:
-                        if response.status != 200:
-                            raise Exception(f"API request failed with status: {response.status}")
-                        
-                        content_type = response.headers.get('Content-Type', '')
-                        if 'application/json' not in content_type and 'text/json' not in content_type:
-                            if attempt < 2:  # 最後の試行でなければリトライ
-                                print(f"Unexpected content type: {content_type}, retrying... (attempt {attempt + 1}/3)")
-                                await asyncio.sleep(2 ** attempt)  # exponential backoff
-                                continue
-                            raise Exception(f"Unexpected content type: {content_type}")
-                        
-                        return await response.json()
-                        
-                except Exception as e:
-                    if attempt < 2:  # 最後の試行でなければリトライ
-                        print(f"Error during API request: {e}, retrying... (attempt {attempt + 1}/3)")
-                        await asyncio.sleep(2 ** attempt)  # exponential backoff
-                        continue
-                    raise Exception(f"API request failed after 3 attempts: {e}")
+class XRPLBalanceValidator:
+    def __init__(self, node_url="wss://s1.ripple.com", max_retries=2, retry_delay=1):
+        self.node_url = node_url
+        self.client = None
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
 
-    def convert_balance_to_xrp(self, drops: int) -> float:
-        return drops / 1_000_000
+    async def setup_client(self):
+        self.client = AsyncJsonRpcClient(self.node_url)
 
-    def format_label(self, name: str, desc: str) -> str:
-        """Format label with name and description"""
-        if not name or name == "Unknown":
-            return "Unknown"
-            
-        if desc:
-            return f"{name} ({desc})"
-        return name
+    async def cleanup_client(self):
+        if self.client and hasattr(self.client, '_client'):
+            await self.client._client.close()
+        self.client = None
 
-    async def get_rich_list(self) -> List[XRPAccount]:
-        data = await self.fetch_data("balances")
-        accounts = []
-        
-        for entry in data:
-            # Safely handle the name field which might be None
-            name_info = entry.get('name') or {}
-            
-            account = XRPAccount(
-                account=entry['account'],
-                balance=self.convert_balance_to_xrp(entry['balance']),
-                name=name_info.get('name', 'Unknown'),
-                desc=name_info.get('desc', ''),
-                domain=name_info.get('domain', ''),
-                twitter=name_info.get('twitter', '')
-            )
-            accounts.append(account)
-            
-        return accounts
-
-    async def get_well_known_accounts(self) -> List[XRPAccount]:
-        data = await self.fetch_data("names/well-known")
-        accounts = []
-        
-        for entry in data:
-            account = XRPAccount(
-                account=entry['account'],
-                balance=0,  # Will be updated later if in rich list
-                name=entry.get('name', 'Unknown'),
-                desc=entry.get('desc', ""),
-                domain=entry.get('domain', ""),
-                twitter=entry.get('twitter', ""),
-                verified=entry.get('verified', False)
-            )
-            accounts.append(account)
-            
-        return accounts
-
-    def merge_accounts(self, rich_list: List[XRPAccount], well_known: List[XRPAccount]) -> List[XRPAccount]:
-        well_known_dict = {acc.account: acc for acc in well_known}
-        processed_accounts: Set[str] = set()
-        merged_accounts = []
-        
-        # Process rich list first
-        for rich_acc in rich_list:
-            if rich_acc.account in processed_accounts:
-                continue
+    async def get_escrow_info(self, address: str) -> Optional[float]:
+        """Get escrow balance for an account"""
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = await self.client.request(AccountObjects(
+                    account=address,
+                    type="escrow",
+                    ledger_index="validated"
+                ))
                 
-            if rich_acc.account in well_known_dict:
-                well_known_acc = well_known_dict[rich_acc.account]
-                well_known_acc.balance = rich_acc.balance
-                merged_accounts.append(well_known_acc)
-            else:
-                merged_accounts.append(rich_acc)
-                
-            processed_accounts.add(rich_acc.account)
-        
-        # Add remaining well-known accounts
-        for well_known_acc in well_known:
-            if well_known_acc.account not in processed_accounts:
-                merged_accounts.append(well_known_acc)
-                processed_accounts.add(well_known_acc.account)
-        
-        return sorted(merged_accounts, key=lambda x: x.balance, reverse=True)
-
-    async def save_to_csv(self, output_path: str):
-        try:
-            print("Fetching rich list data...")
-            rich_list = await self.get_rich_list()
-            print(f"Found {len(rich_list)} accounts in rich list")
-            
-            print("Fetching well-known accounts...")
-            well_known = await self.get_well_known_accounts()
-            print(f"Found {len(well_known)} well-known accounts")
-            
-            print("Merging account data...")
-            merged_accounts = self.merge_accounts(rich_list, well_known)
-            
-            snapshot_date = datetime.now(timezone.utc).isoformat()
-            
-            print(f"Saving data to {output_path}...")
-            with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
-                fieldnames = ['rank', 'address', 'label', 'balance_xrp', 'percentage', 
-                            'domain', 'twitter', 'verified', 'snapshot_date']
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                writer.writeheader()
-                
-                total_xrp = sum(acc.balance for acc in merged_accounts)
-                
-                for rank, account in enumerate(merged_accounts, 1):
-                    percentage = (account.balance / total_xrp * 100) if total_xrp > 0 else 0
+                response_dict = response.to_dict()
+                if (response_dict.get('status') == 'success' and 
+                    'result' in response_dict and 
+                    'account_objects' in response_dict['result']):
                     
-                    writer.writerow({
-                        'rank': rank,
-                        'address': account.account,
-                        'label': self.format_label(account.name, account.desc),
-                        'balance_xrp': account.balance,
-                        'percentage': round(percentage, 6),
-                        'domain': account.domain,
-                        'twitter': account.twitter,
-                        'verified': account.verified,
-                        'snapshot_date': snapshot_date
-                    })
+                    escrows = response_dict['result']['account_objects']
+                    return sum(
+                        float(escrow['Amount']) / 1000000 
+                        for escrow in escrows 
+                        if isinstance(escrow, dict) and 'Amount' in escrow
+                    )
+
+                if attempt < self.max_retries:
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+                
+                return 0
+                    
+            except Exception as e:
+                if attempt < self.max_retries:
+                    print(f"Retry {attempt + 1}/{self.max_retries} for escrow {address}")
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+                print(f"Error fetching escrow for {address}: {e}")
+                return 0
+
+    async def check_account(self, address: str) -> ValidatedAccount:
+        """Validate a single account's current balance"""
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = await self.client.request(AccountInfo(
+                    account=address,
+                    ledger_index="validated"
+                ))
+                
+                response_dict = response.to_dict()
+                if (response_dict.get('status') == 'success' and 
+                    'result' in response_dict and 
+                    'account_data' in response_dict['result'] and 
+                    'Balance' in response_dict['result']['account_data']):
+                    
+                    current_balance = float(response_dict['result']['account_data']['Balance']) / 1000000
+                    escrow_balance = await self.get_escrow_info(address) or 0
+                    
+                    return ValidatedAccount(
+                        address=address,
+                        balance_xrp=current_balance,
+                        escrow_xrp=escrow_balance,
+                        exists=True
+                    )
+                
+                if attempt < self.max_retries:
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+                
+                return ValidatedAccount(
+                    address=address,
+                    balance_xrp=0,
+                    escrow_xrp=0,
+                    exists=False
+                )
+                    
+            except Exception as e:
+                if attempt < self.max_retries:
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+                print(f"Error checking account {address}: {e}")
+                raise
+
+    async def validate_balances(self, csv_path: str, batch_size: int = 16):
+        """Validate balances for all accounts in the CSV"""
+        print("Starting balance validation...")
+        temp_path = f"{csv_path}.temp"
+        
+        try:
+            await self.setup_client()
             
-            print(f"Successfully saved {len(merged_accounts)} entries to CSV")
-            return True
+            # Read CSV
+            with open(csv_path, 'r', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                entries = list(reader)
+
+            total = len(entries)
+            processed = 0
+            verified_count = 0
+            
+            # Prepare output CSV
+            with open(temp_path, 'w', newline='', encoding='utf-8') as tempfile:
+                fieldnames = ['rank', 'address', 'label', 'balance_xrp', 'escrow_xrp', 
+                            'percentage', 'domain', 'twitter', 'verified', 'snapshot_date',
+                            'exists']
+                writer = csv.DictWriter(tempfile, fieldnames=fieldnames)
+                writer.writeheader()
+
+                # Process in batches
+                for i in range(0, total, batch_size):
+                    batch = entries[i:i + batch_size]
+                    tasks = []
+                    
+                    for entry in batch:
+                        tasks.append(self.check_account(entry['address']))
+                    
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    
+                    for entry, result in zip(batch, results):
+                        if isinstance(result, Exception):
+                            print(f"Error processing {entry['address']}: {result}")
+                            writer.writerow(entry)  # Keep original data
+                            continue
+                            
+                        if result.exists:
+                            entry['balance_xrp'] = result.balance_xrp
+                            entry['escrow_xrp'] = result.escrow_xrp
+                            entry['exists'] = True
+                            verified_count += 1
+                        else:
+                            entry['balance_xrp'] = 0
+                            entry['escrow_xrp'] = 0
+                            entry['exists'] = False
+                        
+                        writer.writerow(entry)
+                    
+                    processed += len(batch)
+                    if processed % 100 == 0:
+                        print(f"Processed {processed}/{total} entries ({(processed/total)*100:.1f}%)")
+                        print(f"Successfully verified: {verified_count} addresses")
+                    
+                    if i + batch_size < total:
+                        await asyncio.sleep(1)  # Rate limiting
+
+            # Replace original file with validated data
+            os.replace(temp_path, csv_path)
+            print(f"\nBalance validation completed:")
+            print(f"Total processed: {total}")
+            print(f"Successfully verified: {verified_count}")
             
         except Exception as e:
-            print(f"Error creating CSV: {e}")
-            return False
+            print(f"Error during balance validation: {e}")
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise
+        finally:
+            await self.cleanup_client()
 
 async def main():
-    temp_csv_path = "rich_list_temp.csv"
-    fetcher = XRPDataFetcher()
-    await fetcher.save_to_csv(temp_csv_path)
+    validator = XRPLBalanceValidator()
+    await validator.validate_balances("rich_list_temp.csv")
 
 if __name__ == "__main__":
     asyncio.run(main())
