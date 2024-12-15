@@ -19,28 +19,38 @@ class XRPAccount:
 class XRPDataFetcher:
     def __init__(self):
         self.base_url = "https://api.xrpscan.com/api/v1"
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Accept': 'application/json'
+        }
         
     async def fetch_data(self, endpoint: str) -> List[Dict]:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{self.base_url}/{endpoint}") as response:
-                if response.status != 200:
-                    raise Exception(f"API request failed: {response.status}")
-                return await response.json()
+        async with aiohttp.ClientSession(headers=self.headers) as session:
+            for attempt in range(3):  # 3回までリトライ
+                try:
+                    async with session.get(f"{self.base_url}/{endpoint}") as response:
+                        if response.status != 200:
+                            raise Exception(f"API request failed with status: {response.status}")
+                        
+                        content_type = response.headers.get('Content-Type', '')
+                        if 'application/json' not in content_type and 'text/json' not in content_type:
+                            if attempt < 2:
+                                print(f"Unexpected content type: {content_type}, retrying... (attempt {attempt + 1}/3)")
+                                await asyncio.sleep(5 * (attempt + 1)) 
+                                continue
+                            raise Exception(f"Unexpected content type: {content_type}")
+                        
+                        return await response.json()
+                        
+                except Exception as e:
+                    if attempt < 2:
+                        print(f"Error during API request: {e}, retrying... (attempt {attempt + 1}/3)")
+                        await asyncio.sleep(5 * (attempt + 1))
+                        continue
+                    raise Exception(f"API request failed after 3 attempts: {e}")
 
     def convert_balance_to_xrp(self, drops: int) -> float:
         return drops / 1_000_000
-
-    def extract_name_info(self, name_data: Dict) -> tuple:
-        """Extract name information from the API response safely"""
-        if not name_data:
-            return "Unknown", "", "", ""
-            
-        return (
-            name_data.get('name', 'Unknown'),
-            name_data.get('desc', ''),
-            name_data.get('domain', ''),
-            name_data.get('twitter', '')
-        )
 
     def format_label(self, name: str, desc: str) -> str:
         """Format label with name and description"""
@@ -58,15 +68,14 @@ class XRPDataFetcher:
         for entry in data:
             # Safely handle the name field which might be None
             name_info = entry.get('name') or {}
-            name, desc, domain, twitter = self.extract_name_info(name_info)
             
             account = XRPAccount(
                 account=entry['account'],
                 balance=self.convert_balance_to_xrp(entry['balance']),
-                name=name,
-                desc=desc,
-                domain=domain,
-                twitter=twitter
+                name=name_info.get('name', 'Unknown'),
+                desc=name_info.get('desc', ''),
+                domain=name_info.get('domain', ''),
+                twitter=name_info.get('twitter', '')
             )
             accounts.append(account)
             
@@ -79,7 +88,7 @@ class XRPDataFetcher:
         for entry in data:
             account = XRPAccount(
                 account=entry['account'],
-                balance=0,  # Will be updated later if in rich list
+                balance=0,
                 name=entry.get('name', 'Unknown'),
                 desc=entry.get('desc', ""),
                 domain=entry.get('domain', ""),
@@ -91,13 +100,8 @@ class XRPDataFetcher:
         return accounts
 
     def merge_accounts(self, rich_list: List[XRPAccount], well_known: List[XRPAccount]) -> List[XRPAccount]:
-        # Create a lookup for well-known accounts
         well_known_dict = {acc.account: acc for acc in well_known}
-        
-        # Create a set to track processed accounts
         processed_accounts: Set[str] = set()
-        
-        # Final merged list
         merged_accounts = []
         
         # Process rich list first
@@ -106,7 +110,6 @@ class XRPDataFetcher:
                 continue
                 
             if rich_acc.account in well_known_dict:
-                # Update balance in well-known account
                 well_known_acc = well_known_dict[rich_acc.account]
                 well_known_acc.balance = rich_acc.balance
                 merged_accounts.append(well_known_acc)
@@ -115,7 +118,7 @@ class XRPDataFetcher:
                 
             processed_accounts.add(rich_acc.account)
         
-        # Add remaining well-known accounts that weren't in rich list
+        # Add remaining well-known accounts
         for well_known_acc in well_known:
             if well_known_acc.account not in processed_accounts:
                 merged_accounts.append(well_known_acc)
@@ -171,8 +174,18 @@ class XRPDataFetcher:
             return False
 
 async def main():
-    fetcher = XRPDataFetcher()
-    await fetcher.save_to_csv("rich_list_temp.csv")
+    retries = 3
+    for attempt in range(retries):
+        try:
+            fetcher = XRPDataFetcher()
+            await fetcher.save_to_csv("rich_list_temp.csv")
+            break
+        except Exception as e:
+            if attempt < retries - 1:
+                print(f"Attempt {attempt + 1} failed: {e}")
+                await asyncio.sleep(10)  # 10秒待ってリトライ
+                continue
+            raise
 
 if __name__ == "__main__":
     asyncio.run(main())
