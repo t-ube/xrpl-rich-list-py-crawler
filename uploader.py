@@ -128,6 +128,23 @@ class SupabaseUploader:
             print(f"Error updating balance changes: {e}")
             return False
 
+    def update_available_changes(self) -> bool:
+        try:
+            # PostgreSQL関数を呼び出す
+            response = self.supabase.rpc(
+                'update_available_changes'
+            ).execute()
+            
+            if hasattr(response, 'error') and response.error:
+                raise Exception(f"Available changes update failed: {response.error}")
+            
+            print("Successfully updated available changes")
+            return True
+            
+        except Exception as e:
+            print(f"Error updating available changes: {e}")
+            return False
+
     def cleanup_old_data(self) -> bool:
         try:
             # PostgreSQL関数を呼び出す
@@ -166,6 +183,10 @@ class RichListUploadProcessor:
             print("Calculating balance changes...")
             if not self.uploader.update_balance_changes():
                 raise Exception("Balance changes calculation failed")
+
+            print("Calculating available changes...")
+            if not self.uploader.update_available_changes():
+                raise Exception("Available changes calculation failed")
             
             print("Cleaning up old data...")
             if not self.uploader.cleanup_old_data():
