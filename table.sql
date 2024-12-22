@@ -13,11 +13,15 @@ CREATE TABLE xrpl_rich_list (
     CONSTRAINT xrpl_rich_list_unique_snapshot UNIQUE (address, snapshot_date)
 );
 
+-- domainカラムを追加
+ALTER TABLE xrpl_rich_list ADD COLUMN domain TEXT;
+
 -- 効率的な検索のためのインデックス
 CREATE INDEX idx_xrpl_rich_list_snapshot_date ON xrpl_rich_list(snapshot_date);
 CREATE INDEX idx_xrpl_rich_list_address ON xrpl_rich_list(address);
 CREATE INDEX idx_xrpl_rich_list_rank ON xrpl_rich_list(rank);
 CREATE INDEX idx_xrpl_rich_list_exists ON xrpl_rich_list(exists);
+CREATE INDEX idx_xrpl_rich_list_domain ON xrpl_rich_list(domain);
 
 
 CREATE TABLE xrpl_rich_list_summary (

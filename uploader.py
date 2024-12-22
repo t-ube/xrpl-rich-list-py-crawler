@@ -52,7 +52,8 @@ class SupabaseUploader:
                         'escrow_xrp': float(row['escrow_xrp']),
                         'percentage': float(row['percentage']),
                         'snapshot_date': row['snapshot_date'],
-                        'exists': exists_value
+                        'exists': exists_value,
+                        'domain': row['domain']
                     })
                     
                     if len(current_batch) >= batch_size:
