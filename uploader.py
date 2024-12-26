@@ -146,6 +146,40 @@ class SupabaseUploader:
             print(f"Error updating available changes: {e}")
             return False
 
+    def update_category_changes(self) -> bool:
+        try:
+            # PostgreSQL関数を呼び出す
+            response = self.supabase.rpc(
+                'update_category_changes'
+            ).execute()
+            
+            if hasattr(response, 'error') and response.error:
+                raise Exception(f"Category changes update failed: {response.error}")
+            
+            print("Successfully updated category changes")
+            return True
+            
+        except Exception as e:
+            print(f"Error updating category changes: {e}")
+            return False
+
+    def update_country_changes(self) -> bool:
+        try:
+            # PostgreSQL関数を呼び出す
+            response = self.supabase.rpc(
+                'update_country_changes'
+            ).execute()
+            
+            if hasattr(response, 'error') and response.error:
+                raise Exception(f"Country changes update failed: {response.error}")
+            
+            print("Successfully updated country changes")
+            return True
+            
+        except Exception as e:
+            print(f"Error updating country changes: {e}")
+            return False
+
     def cleanup_old_data(self) -> bool:
         try:
             # PostgreSQL関数を呼び出す
@@ -188,7 +222,15 @@ class RichListUploadProcessor:
             print("Calculating available changes...")
             if not self.uploader.update_available_changes():
                 raise Exception("Available changes calculation failed")
-            
+
+            print("Calculating category changes...")
+            if not self.uploader.update_category_changes():
+                raise Exception("Category changes calculation failed")
+
+            print("Calculating country changes...")
+            if not self.uploader.update_country_changes():
+                raise Exception("Country changes calculation failed")
+    
             print("Cleaning up old data...")
             if not self.uploader.cleanup_old_data():
                 raise Exception("Data cleanup failed")

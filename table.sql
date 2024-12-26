@@ -251,3 +251,182 @@ LEFT JOIN xrpl_rich_list_available_changes h720
    ON s.grouped_label = h720.grouped_label 
    AND h720.hours = 720
 ORDER BY s.total_balance DESC;
+
+-- カテゴリごとの合計変化を追跡するテーブル
+CREATE TABLE xrpl_rich_list_category_changes (
+    id SERIAL PRIMARY KEY,
+    category VARCHAR(50) NOT NULL,
+    hours INTEGER NOT NULL,  -- 1, 3, 24, 168, 720
+    count INTEGER,
+    total_balance NUMERIC NOT NULL,
+    total_escrow NUMERIC NOT NULL,
+    total_xrp NUMERIC NOT NULL,
+    balance_change NUMERIC,
+    percentage_change NUMERIC,
+    calculated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- カテゴリの制約（xrpl_rich_list_categoriesと同じ制約を維持）
+    CONSTRAINT valid_category CHECK (
+        category IN (
+            'Major Contributor',
+            'Exchange',
+            'Casino/Gambling',
+            'Payment Service',
+            'DeFi Protocol',
+            'Trading Service',
+            'NFT/Gaming',
+            'Custody/Institution',
+            'Individual',
+            'Other'
+        )
+    )
+);
+
+-- 効率的な検索のためのインデックス
+CREATE INDEX idx_category_changes_category ON xrpl_rich_list_category_changes(category);
+CREATE INDEX idx_category_changes_hours ON xrpl_rich_list_category_changes(hours);
+CREATE INDEX idx_category_changes_calculated_at ON xrpl_rich_list_category_changes(calculated_at);
+
+-- カテゴリ別のサマリービューを作成
+CREATE OR REPLACE VIEW xrpl_rich_list_category_summary_with_changes AS
+WITH latest_changes AS (
+    SELECT DISTINCT
+        category,
+        MAX(calculated_at) as latest_calculated_at
+    FROM xrpl_rich_list_category_changes
+    GROUP BY category
+),
+category_data AS (
+    SELECT DISTINCT
+        c.category as grouped_label,
+        c.count as count,
+        c.total_balance,
+        c.total_escrow,
+        c.total_xrp,
+        c.calculated_at as created_at,
+        c.total_xrp as show_total_xrp,
+        c.category as entity_category,
+        '-' as entity_country,
+        h1.balance_change as change_1h,
+        h1.percentage_change as percentage_1h,
+        h3.balance_change as change_3h,
+        h3.percentage_change as percentage_3h,
+        h24.balance_change as change_24h,
+        h24.percentage_change as percentage_24h,
+        h168.balance_change as change_168h,
+        h168.percentage_change as percentage_168h,
+        h720.balance_change as change_720h,
+        h720.percentage_change as percentage_720h
+    FROM latest_changes lc
+    JOIN xrpl_rich_list_category_changes c 
+        ON c.category = lc.category 
+        AND c.calculated_at = lc.latest_calculated_at
+    LEFT JOIN xrpl_rich_list_category_changes h1 
+        ON c.category = h1.category 
+        AND h1.hours = 1
+        AND h1.calculated_at = c.calculated_at
+    LEFT JOIN xrpl_rich_list_category_changes h3
+        ON c.category = h3.category 
+        AND h3.hours = 3
+        AND h3.calculated_at = c.calculated_at
+    LEFT JOIN xrpl_rich_list_category_changes h24
+        ON c.category = h24.category 
+        AND h24.hours = 24
+        AND h24.calculated_at = c.calculated_at
+    LEFT JOIN xrpl_rich_list_category_changes h168
+        ON c.category = h168.category 
+        AND h168.hours = 168
+        AND h168.calculated_at = c.calculated_at
+    LEFT JOIN xrpl_rich_list_category_changes h720
+        ON c.category = h720.category 
+        AND h720.hours = 720
+        AND h720.calculated_at = c.calculated_at
+)
+SELECT 
+    ROW_NUMBER() OVER (ORDER BY total_xrp DESC) as id,
+    *
+FROM category_data
+ORDER BY total_xrp DESC;
+
+-- 国別の合計変化を追跡するテーブル
+CREATE TABLE xrpl_rich_list_country_changes (
+    id SERIAL PRIMARY KEY,
+    country VARCHAR(50) NOT NULL,
+    hours INTEGER NOT NULL,  -- 1, 3, 24, 168, 720
+    count INTEGER,
+    total_balance NUMERIC NOT NULL,
+    total_escrow NUMERIC NOT NULL,
+    total_xrp NUMERIC NOT NULL,
+    balance_change NUMERIC,
+    percentage_change NUMERIC,
+    calculated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Unknown をデフォルトとして許可
+    CONSTRAINT valid_country CHECK (country <> '')
+);
+
+-- 効率的な検索のためのインデックス
+CREATE INDEX idx_country_changes_country ON xrpl_rich_list_country_changes(country);
+CREATE INDEX idx_country_changes_hours ON xrpl_rich_list_country_changes(hours);
+CREATE INDEX idx_country_changes_calculated_at ON xrpl_rich_list_country_changes(calculated_at);
+
+-- 国別の最新データを表示するビュー
+CREATE VIEW xrpl_rich_list_country_summary_with_changes AS
+WITH latest_changes AS (
+    SELECT 
+        country,
+        MAX(calculated_at) as latest_calculated_at
+    FROM xrpl_rich_list_country_changes
+    GROUP BY country
+),
+country_data AS (
+    SELECT DISTINCT
+        c.country as grouped_label,
+        c.count as count,
+        c.total_balance,
+        c.total_escrow,
+        c.total_xrp,
+        c.calculated_at as created_at,
+        c.total_xrp as show_total_xrp,
+        '-' as entity_category,
+        c.country as entity_country,
+        h1.balance_change as change_1h,
+        h1.percentage_change as percentage_1h,
+        h3.balance_change as change_3h,
+        h3.percentage_change as percentage_3h,
+        h24.balance_change as change_24h,
+        h24.percentage_change as percentage_24h,
+        h168.balance_change as change_168h,
+        h168.percentage_change as percentage_168h,
+        h720.balance_change as change_720h,
+        h720.percentage_change as percentage_720h
+    FROM latest_changes lc
+    JOIN xrpl_rich_list_country_changes c 
+        ON c.country = lc.country 
+        AND c.calculated_at = lc.latest_calculated_at
+    LEFT JOIN xrpl_rich_list_country_changes h1 
+        ON c.country = h1.country 
+        AND h1.hours = 1
+        AND h1.calculated_at = c.calculated_at
+    LEFT JOIN xrpl_rich_list_country_changes h3
+        ON c.country = h3.country 
+        AND h3.hours = 3
+        AND h3.calculated_at = c.calculated_at
+    LEFT JOIN xrpl_rich_list_country_changes h24
+        ON c.country = h24.country 
+        AND h24.hours = 24
+        AND h24.calculated_at = c.calculated_at
+    LEFT JOIN xrpl_rich_list_country_changes h168
+        ON c.country = h168.country 
+        AND h168.hours = 168
+        AND h168.calculated_at = c.calculated_at
+    LEFT JOIN xrpl_rich_list_country_changes h720
+        ON c.country = h720.country 
+        AND h720.hours = 720
+        AND h720.calculated_at = c.calculated_at
+)
+SELECT 
+    ROW_NUMBER() OVER (ORDER BY total_xrp DESC) as id,
+    *
+FROM country_data
+ORDER BY total_xrp DESC;

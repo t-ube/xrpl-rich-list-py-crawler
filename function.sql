@@ -414,3 +414,432 @@ begin
     WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '370 days';
 end;
 $$;
+
+-- カテゴリ別の残高変更を更新する関数
+CREATE OR REPLACE FUNCTION update_category_changes()
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- 既存のデータを削除
+    DELETE FROM xrpl_rich_list_category_changes WHERE TRUE;
+    
+    -- 新しいデータを挿入
+    WITH current_totals AS (
+        SELECT 
+            c.category,
+            SUM(count) as count,
+            SUM(s.total_balance) as total_balance,
+            SUM(s.total_escrow) as total_escrow,
+            SUM(s.total_xrp) as total_xrp,
+            s.created_at
+        FROM xrpl_rich_list_summary s
+        JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+        WHERE s.created_at = (
+            SELECT created_at 
+            FROM xrpl_rich_list_summary 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        )
+        GROUP BY c.category, s.created_at
+    ),
+    period_changes AS (
+        SELECT 
+            c.category,
+            c.count,
+            c.total_balance,
+            c.total_escrow,
+            c.total_xrp,
+            -- 1時間の変化
+            c.total_xrp - COALESCE(h1.total_xrp, c.total_xrp) as hour_1_change,
+            CASE 
+                WHEN COALESCE(h1.total_xrp, c.total_xrp) = 0 THEN 0
+                ELSE ((c.total_xrp - COALESCE(h1.total_xrp, c.total_xrp)) / COALESCE(h1.total_xrp, c.total_xrp) * 100)
+            END as hour_1_percentage,
+            -- 3時間の変化
+            c.total_xrp - COALESCE(h3.total_xrp, c.total_xrp) as hour_3_change,
+            CASE 
+                WHEN COALESCE(h3.total_xrp, c.total_xrp) = 0 THEN 0
+                ELSE ((c.total_xrp - COALESCE(h3.total_xrp, c.total_xrp)) / COALESCE(h3.total_xrp, c.total_xrp) * 100)
+            END as hour_3_percentage,
+            -- 24時間の変化
+            c.total_xrp - COALESCE(h24.total_xrp, c.total_xrp) as hour_24_change,
+            CASE 
+                WHEN COALESCE(h24.total_xrp, c.total_xrp) = 0 THEN 0
+                ELSE ((c.total_xrp - COALESCE(h24.total_xrp, c.total_xrp)) / COALESCE(h24.total_xrp, c.total_xrp) * 100)
+            END as hour_24_percentage,
+            -- 168時間（7日）の変化
+            c.total_xrp - COALESCE(h168.total_xrp, c.total_xrp) as hour_168_change,
+            CASE 
+                WHEN COALESCE(h168.total_xrp, c.total_xrp) = 0 THEN 0
+                ELSE ((c.total_xrp - COALESCE(h168.total_xrp, c.total_xrp)) / COALESCE(h168.total_xrp, c.total_xrp) * 100)
+            END as hour_168_percentage,
+            -- 720時間（30日）の変化
+            c.total_xrp - COALESCE(h720.total_xrp, c.total_xrp) as hour_720_change,
+            CASE 
+                WHEN COALESCE(h720.total_xrp, c.total_xrp) = 0 THEN 0
+                ELSE ((c.total_xrp - COALESCE(h720.total_xrp, c.total_xrp)) / COALESCE(h720.total_xrp, c.total_xrp) * 100)
+            END as hour_720_percentage
+        FROM current_totals c
+        -- 1時間前のデータ
+        LEFT JOIN (
+            SELECT 
+                c.category,
+                SUM(s.total_xrp) as total_xrp
+            FROM xrpl_rich_list_summary s
+            JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+            WHERE s.created_at = (
+                SELECT created_at 
+                FROM xrpl_rich_list_summary 
+                WHERE created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '1 hour'
+                ORDER BY created_at DESC 
+                LIMIT 1
+            )
+            GROUP BY c.category
+        ) h1 ON c.category = h1.category
+        -- 3時間前のデータ
+        LEFT JOIN (
+            SELECT 
+                c.category,
+                SUM(s.total_xrp) as total_xrp
+            FROM xrpl_rich_list_summary s
+            JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+            WHERE s.created_at = (
+                SELECT created_at 
+                FROM xrpl_rich_list_summary 
+                WHERE created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '3 hours'
+                ORDER BY created_at DESC 
+                LIMIT 1
+            )
+            GROUP BY c.category
+        ) h3 ON c.category = h3.category
+        -- 24時間前のデータ
+        LEFT JOIN (
+            SELECT 
+                c.category,
+                SUM(s.total_xrp) as total_xrp
+            FROM xrpl_rich_list_summary s
+            JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+            WHERE s.created_at = (
+                SELECT created_at 
+                FROM xrpl_rich_list_summary 
+                WHERE created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '24 hours'
+                ORDER BY created_at DESC 
+                LIMIT 1
+            )
+            GROUP BY c.category
+        ) h24 ON c.category = h24.category
+        -- 168時間前のデータ
+        LEFT JOIN (
+            SELECT 
+                c.category,
+                SUM(s.total_xrp) as total_xrp
+            FROM xrpl_rich_list_summary s
+            JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+            WHERE s.created_at = (
+                SELECT created_at 
+                FROM xrpl_rich_list_summary 
+                WHERE created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '168 hours'
+                ORDER BY created_at DESC 
+                LIMIT 1
+            )
+            GROUP BY c.category
+        ) h168 ON c.category = h168.category
+        -- 720時間前のデータ
+        LEFT JOIN (
+            SELECT 
+                c.category,
+                SUM(s.total_xrp) as total_xrp
+            FROM xrpl_rich_list_summary s
+            JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+            WHERE s.created_at = (
+                SELECT created_at 
+                FROM xrpl_rich_list_summary 
+                WHERE created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '720 hours'
+                ORDER BY created_at DESC 
+                LIMIT 1
+            )
+            GROUP BY c.category
+        ) h720 ON c.category = h720.category
+    )
+    INSERT INTO xrpl_rich_list_category_changes 
+        (category, hours, count, total_balance, total_escrow, total_xrp, balance_change, percentage_change, calculated_at)
+    SELECT 
+        category,
+        1,
+        count,
+        total_balance,
+        total_escrow,
+        total_xrp,
+        hour_1_change,
+        hour_1_percentage,
+        CURRENT_TIMESTAMP
+    FROM period_changes
+    UNION ALL
+    SELECT 
+        category,
+        3,
+        count,
+        total_balance,
+        total_escrow,
+        total_xrp,
+        hour_3_change,
+        hour_3_percentage,
+        CURRENT_TIMESTAMP
+    FROM period_changes
+    UNION ALL
+    SELECT 
+        category,
+        24,
+        count,
+        total_balance,
+        total_escrow,
+        total_xrp,
+        hour_24_change,
+        hour_24_percentage,
+        CURRENT_TIMESTAMP
+    FROM period_changes
+    UNION ALL
+    SELECT 
+        category,
+        168,
+        count,
+        total_balance,
+        total_escrow,
+        total_xrp,
+        hour_168_change,
+        hour_168_percentage,
+        CURRENT_TIMESTAMP
+    FROM period_changes
+    UNION ALL
+    SELECT 
+        category,
+        720,
+        count,
+        total_balance,
+        total_escrow,
+        total_xrp,
+        hour_720_change,
+        hour_720_percentage,
+        CURRENT_TIMESTAMP
+    FROM period_changes;
+END;
+$$;
+
+-- 国別の残高変更を更新する関数
+CREATE OR REPLACE FUNCTION update_country_changes()
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- 既存のデータを削除
+    DELETE FROM xrpl_rich_list_country_changes WHERE TRUE;
+    
+    -- 新しいデータを挿入
+    WITH current_totals AS (
+        SELECT 
+            c.country,
+            SUM(count) as count,
+            SUM(s.total_balance) as total_balance,
+            SUM(s.total_escrow) as total_escrow,
+            SUM(s.total_xrp) as total_xrp,
+            s.created_at
+        FROM xrpl_rich_list_summary s
+        JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+        WHERE s.created_at = (
+            SELECT created_at 
+            FROM xrpl_rich_list_summary 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        )
+        GROUP BY c.country, s.created_at
+    ),
+    period_changes AS (
+        SELECT 
+            c.country,
+            c.count,
+            c.total_balance,
+            c.total_escrow,
+            c.total_xrp,
+            -- 1時間の変化
+            c.total_xrp - COALESCE(h1.total_xrp, c.total_xrp) as hour_1_change,
+            CASE 
+                WHEN COALESCE(h1.total_xrp, c.total_xrp) = 0 THEN 0
+                ELSE ((c.total_xrp - COALESCE(h1.total_xrp, c.total_xrp)) / COALESCE(h1.total_xrp, c.total_xrp) * 100)
+            END as hour_1_percentage,
+            -- 3時間の変化
+            c.total_xrp - COALESCE(h3.total_xrp, c.total_xrp) as hour_3_change,
+            CASE 
+                WHEN COALESCE(h3.total_xrp, c.total_xrp) = 0 THEN 0
+                ELSE ((c.total_xrp - COALESCE(h3.total_xrp, c.total_xrp)) / COALESCE(h3.total_xrp, c.total_xrp) * 100)
+            END as hour_3_percentage,
+            -- 24時間の変化
+            c.total_xrp - COALESCE(h24.total_xrp, c.total_xrp) as hour_24_change,
+            CASE 
+                WHEN COALESCE(h24.total_xrp, c.total_xrp) = 0 THEN 0
+                ELSE ((c.total_xrp - COALESCE(h24.total_xrp, c.total_xrp)) / COALESCE(h24.total_xrp, c.total_xrp) * 100)
+            END as hour_24_percentage,
+            -- 168時間（7日）の変化
+            c.total_xrp - COALESCE(h168.total_xrp, c.total_xrp) as hour_168_change,
+            CASE 
+                WHEN COALESCE(h168.total_xrp, c.total_xrp) = 0 THEN 0
+                ELSE ((c.total_xrp - COALESCE(h168.total_xrp, c.total_xrp)) / COALESCE(h168.total_xrp, c.total_xrp) * 100)
+            END as hour_168_percentage,
+            -- 720時間（30日）の変化
+            c.total_xrp - COALESCE(h720.total_xrp, c.total_xrp) as hour_720_change,
+            CASE 
+                WHEN COALESCE(h720.total_xrp, c.total_xrp) = 0 THEN 0
+                ELSE ((c.total_xrp - COALESCE(h720.total_xrp, c.total_xrp)) / COALESCE(h720.total_xrp, c.total_xrp) * 100)
+            END as hour_720_percentage
+        FROM current_totals c
+        -- 1時間前のデータ
+        LEFT JOIN (
+            SELECT 
+                c.country,
+                SUM(s.total_xrp) as total_xrp,
+                s.created_at
+            FROM xrpl_rich_list_summary s
+            JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+            WHERE s.created_at = (
+                SELECT created_at 
+                FROM xrpl_rich_list_summary 
+                WHERE created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '1 hour'
+                ORDER BY created_at DESC 
+                LIMIT 1
+            )
+            GROUP BY c.country, s.created_at
+        ) h1 ON c.country = h1.country
+        -- 3時間前のデータ
+        LEFT JOIN (
+            SELECT 
+                c.country,
+                SUM(s.total_xrp) as total_xrp,
+                s.created_at
+            FROM xrpl_rich_list_summary s
+            JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+            WHERE s.created_at = (
+                SELECT created_at 
+                FROM xrpl_rich_list_summary 
+                WHERE created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '3 hours'
+                ORDER BY created_at DESC 
+                LIMIT 1
+            )
+            GROUP BY c.country, s.created_at
+        ) h3 ON c.country = h3.country
+        -- 24時間前のデータ
+        LEFT JOIN (
+            SELECT 
+                c.country,
+                SUM(s.total_xrp) as total_xrp,
+                s.created_at
+            FROM xrpl_rich_list_summary s
+            JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+            WHERE s.created_at = (
+                SELECT created_at 
+                FROM xrpl_rich_list_summary 
+                WHERE created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '24 hours'
+                ORDER BY created_at DESC 
+                LIMIT 1
+            )
+            GROUP BY c.country, s.created_at
+        ) h24 ON c.country = h24.country
+        -- 168時間前のデータ
+        LEFT JOIN (
+            SELECT 
+                c.country,
+                SUM(s.total_xrp) as total_xrp,
+                s.created_at
+            FROM xrpl_rich_list_summary s
+            JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+            WHERE s.created_at = (
+                SELECT created_at 
+                FROM xrpl_rich_list_summary 
+                WHERE created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '168 hours'
+                ORDER BY created_at DESC 
+                LIMIT 1
+            )
+            GROUP BY c.country, s.created_at
+        ) h168 ON c.country = h168.country
+        -- 720時間前のデータ
+        LEFT JOIN (
+            SELECT 
+                c.country,
+                SUM(s.total_xrp) as total_xrp,
+                s.created_at
+            FROM xrpl_rich_list_summary s
+            JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+            WHERE s.created_at = (
+                SELECT created_at 
+                FROM xrpl_rich_list_summary 
+                WHERE created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '720 hours'
+                ORDER BY created_at DESC 
+                LIMIT 1
+            )
+            GROUP BY c.country, s.created_at
+        ) h720 ON c.country = h720.country
+    )
+    INSERT INTO xrpl_rich_list_country_changes 
+        (country, hours, count, total_balance, total_escrow, total_xrp, balance_change, percentage_change, calculated_at)
+    SELECT 
+        country,
+        1,
+        count,
+        total_balance,
+        total_escrow,
+        total_xrp,
+        hour_1_change,
+        hour_1_percentage,
+        CURRENT_TIMESTAMP
+    FROM period_changes
+    UNION ALL
+    SELECT 
+        country,
+        3,
+        count,
+        total_balance,
+        total_escrow,
+        total_xrp,
+        hour_3_change,
+        hour_3_percentage,
+        CURRENT_TIMESTAMP
+    FROM period_changes
+    UNION ALL
+    SELECT 
+        country,
+        24,
+        count,
+        total_balance,
+        total_escrow,
+        total_xrp,
+        hour_24_change,
+        hour_24_percentage,
+        CURRENT_TIMESTAMP
+    FROM period_changes
+    UNION ALL
+    SELECT 
+        country,
+        168,
+        count,
+        total_balance,
+        total_escrow,
+        total_xrp,
+        hour_168_change,
+        hour_168_percentage,
+        CURRENT_TIMESTAMP
+    FROM period_changes
+    UNION ALL
+    SELECT 
+        country,
+        720,
+        count,
+        total_balance,
+        total_escrow,
+        total_xrp,
+        hour_720_change,
+        hour_720_percentage,
+        CURRENT_TIMESTAMP
+    FROM period_changes;
+END;
+$$;
