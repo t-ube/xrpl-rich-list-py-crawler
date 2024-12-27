@@ -853,13 +853,13 @@ AS $$
 BEGIN
     -- 古いデータの削除（3日以上前のデータを削除）
     DELETE FROM xrpl_rich_list_category_hourly 
-    WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '3 days';
+    WHERE created_at < CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days';
     
     DELETE FROM xrpl_rich_list_country_hourly 
-    WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '3 days';
+    WHERE created_at < CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days';
     
     DELETE FROM xrpl_rich_list_available_hourly 
-    WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '3 days';
+    WHERE created_at < CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days';
     
     -- カテゴリごとの最新データを挿入
     INSERT INTO xrpl_rich_list_category_hourly 
@@ -867,7 +867,7 @@ BEGIN
     WITH latest_summary AS (
         SELECT *
         FROM xrpl_rich_list_summary s
-        WHERE s.created_at >= CURRENT_TIMESTAMP - INTERVAL '3 days'
+        WHERE s.created_at >= CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days'
     )
     SELECT 
         c.category as grouped_label,
@@ -875,10 +875,10 @@ BEGIN
         SUM(s.total_balance) as total_balance,
         SUM(s.total_escrow) as total_escrow,
         SUM(s.total_xrp) as total_xrp,
-        date_trunc('hour', s.created_at) as created_at
+        date_trunc('hour', s.created_at AT TIME ZONE 'UTC') as created_at
     FROM latest_summary s
     JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
-    GROUP BY c.category, date_trunc('hour', s.created_at)
+    GROUP BY c.category, date_trunc('hour', s.created_at AT TIME ZONE 'UTC')
     ON CONFLICT (grouped_label, created_at) 
     DO UPDATE SET
         count = EXCLUDED.count,
@@ -892,7 +892,7 @@ BEGIN
     WITH latest_summary AS (
         SELECT *
         FROM xrpl_rich_list_summary s
-        WHERE s.created_at >= CURRENT_TIMESTAMP - INTERVAL '3 days'
+        WHERE s.created_at >= CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days'
     )
     SELECT 
         c.country as grouped_label,
@@ -900,10 +900,10 @@ BEGIN
         SUM(s.total_balance) as total_balance,
         SUM(s.total_escrow) as total_escrow,
         SUM(s.total_xrp) as total_xrp,
-        date_trunc('hour', s.created_at) as created_at
+        date_trunc('hour', s.created_at AT TIME ZONE 'UTC') as created_at
     FROM latest_summary s
     JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
-    GROUP BY c.country, date_trunc('hour', s.created_at)
+    GROUP BY c.country, date_trunc('hour', s.created_at AT TIME ZONE 'UTC')
     ON CONFLICT (grouped_label, created_at) 
     DO UPDATE SET
         count = EXCLUDED.count,
@@ -917,17 +917,17 @@ BEGIN
     WITH latest_summary AS (
         SELECT *
         FROM xrpl_rich_list_summary s
-        WHERE s.created_at >= CURRENT_TIMESTAMP - INTERVAL '3 days'
+        WHERE s.created_at >= CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days'
     )
     SELECT 
         s.grouped_label,
         s.count,
         s.total_balance,
         s.total_escrow,
-        s.total_balance as total_xrp, -- エスクロー抜きの合計
-        date_trunc('hour', s.created_at) as created_at
+        s.total_balance as total_xrp,
+        date_trunc('hour', s.created_at AT TIME ZONE 'UTC') as created_at
     FROM latest_summary s
-    GROUP BY s.grouped_label, s.count, s.total_balance, s.total_escrow, date_trunc('hour', s.created_at)
+    GROUP BY s.grouped_label, s.count, s.total_balance, s.total_escrow, date_trunc('hour', s.created_at AT TIME ZONE 'UTC')
     ON CONFLICT (grouped_label, created_at) 
     DO UPDATE SET
         count = EXCLUDED.count,
