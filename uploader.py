@@ -20,14 +20,25 @@ class SupabaseUploader:
         self._test_connection()
 
     def _test_connection(self):
-        try:
-            response = self.supabase.table('xrpl_rich_list').select('count', count='exact').limit(1).execute()
-            if hasattr(response, 'error') and response.error:
-                raise Exception(f"Supabase connection test failed: {response.error}")
-            print("Successfully connected to Supabase")
-        except Exception as e:
-            print(f"Failed to connect to Supabase: {e}")
-            raise
+        max_retries = 3
+        retry_delay = 5
+        
+        for attempt in range(max_retries):
+            try:
+                response = self.supabase.table('xrpl_rich_list').select('address').limit(1).execute()
+                if hasattr(response, 'error') and response.error:
+                    raise Exception(f"Supabase connection test failed: {response.error}")
+                print("Successfully connected to Supabase")
+                return
+            except Exception as e:
+                print(f"Connection attempt {attempt + 1}/{max_retries} failed: {e}")
+                if attempt < max_retries - 1:
+                    print(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                else:
+                    print("All connection attempts failed")
+                    raise
 
     def upload_from_csv(self, csv_path: str) -> bool:
         print(f"Starting upload from {csv_path}")
