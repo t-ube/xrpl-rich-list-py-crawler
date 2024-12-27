@@ -430,3 +430,77 @@ SELECT
     *
 FROM country_data
 ORDER BY total_xrp DESC;
+
+-- エスクロー抜きの時系列データを保存するテーブル
+CREATE TABLE xrpl_rich_list_available_hourly (
+    id SERIAL PRIMARY KEY,
+    grouped_label VARCHAR(255) NOT NULL,
+    count INTEGER,
+    total_balance NUMERIC NOT NULL,
+    total_escrow NUMERIC NOT NULL,
+    total_xrp NUMERIC NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    
+    -- 同じ時間のデータが重複しないように
+    CONSTRAINT unique_available_hour UNIQUE (grouped_label, created_at)
+);
+
+-- インデックスの作成
+CREATE INDEX idx_available_hourly_timestamp ON xrpl_rich_list_available_hourly(created_at);
+CREATE INDEX idx_available_hourly_label ON xrpl_rich_list_available_hourly(grouped_label);
+
+-- カテゴリごとの時系列データを保存するテーブル
+CREATE TABLE xrpl_rich_list_category_hourly (
+    id SERIAL PRIMARY KEY,
+    grouped_label VARCHAR(50) NOT NULL,
+    count INTEGER,
+    total_balance NUMERIC NOT NULL,
+    total_escrow NUMERIC NOT NULL,
+    total_xrp NUMERIC NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    
+    -- カテゴリの制約（既存のテーブルと同じ）
+    CONSTRAINT valid_category_hourly CHECK (
+        grouped_label IN (
+            'Major Contributor',
+            'Exchange',
+            'Casino/Gambling',
+            'Payment Service',
+            'DeFi Protocol',
+            'Trading Service',
+            'NFT/Gaming',
+            'Custody/Institution',
+            'Individual',
+            'Other'
+        )
+    ),
+    
+    -- 同じ時間のデータが重複しないように
+    CONSTRAINT unique_category_hour UNIQUE (grouped_label, created_at)
+);
+
+-- インデックスの作成
+CREATE INDEX idx_category_hourly_timestamp ON xrpl_rich_list_category_hourly(created_at);
+CREATE INDEX idx_category_hourly_category ON xrpl_rich_list_category_hourly(grouped_label);
+
+-- 国ごとの時系列データを保存するテーブル
+CREATE TABLE xrpl_rich_list_country_hourly (
+    id SERIAL PRIMARY KEY,
+    grouped_label VARCHAR(50) NOT NULL,
+    count INTEGER,
+    total_balance NUMERIC NOT NULL,
+    total_escrow NUMERIC NOT NULL,
+    total_xrp NUMERIC NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    
+    -- 国名の制約
+    CONSTRAINT valid_country_hourly CHECK (grouped_label <> ''),
+    
+    -- 同じ時間のデータが重複しないように
+    CONSTRAINT unique_country_hour UNIQUE (grouped_label, created_at)
+);
+
+-- インデックスの作成
+CREATE INDEX idx_country_hourly_timestamp ON xrpl_rich_list_country_hourly(created_at);
+CREATE INDEX idx_country_hourly_country ON xrpl_rich_list_country_hourly(grouped_label);
+

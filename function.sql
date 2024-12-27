@@ -843,3 +843,96 @@ BEGIN
     FROM period_changes;
 END;
 $$;
+
+-- 更新用の関数を修正
+CREATE OR REPLACE FUNCTION update_hourly_statistics()
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- 古いデータの削除（3日以上前のデータを削除）
+    DELETE FROM xrpl_rich_list_category_hourly 
+    WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '3 days';
+    
+    DELETE FROM xrpl_rich_list_country_hourly 
+    WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '3 days';
+    
+    DELETE FROM xrpl_rich_list_available_hourly 
+    WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '3 days';
+    
+    -- カテゴリごとの最新データを挿入
+    INSERT INTO xrpl_rich_list_category_hourly 
+        (grouped_label, count, total_balance, total_escrow, total_xrp, created_at)
+    WITH latest_summary AS (
+        SELECT *
+        FROM xrpl_rich_list_summary s
+        WHERE s.created_at >= CURRENT_TIMESTAMP - INTERVAL '3 days'
+    )
+    SELECT 
+        c.category as grouped_label,
+        SUM(s.count) as count,
+        SUM(s.total_balance) as total_balance,
+        SUM(s.total_escrow) as total_escrow,
+        SUM(s.total_xrp) as total_xrp,
+        date_trunc('hour', s.created_at) as created_at
+    FROM latest_summary s
+    JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+    GROUP BY c.category, date_trunc('hour', s.created_at)
+    ON CONFLICT (grouped_label, created_at) 
+    DO UPDATE SET
+        count = EXCLUDED.count,
+        total_balance = EXCLUDED.total_balance,
+        total_escrow = EXCLUDED.total_escrow,
+        total_xrp = EXCLUDED.total_xrp;
+    
+    -- 国ごとの最新データを挿入
+    INSERT INTO xrpl_rich_list_country_hourly 
+        (grouped_label, count, total_balance, total_escrow, total_xrp, created_at)
+    WITH latest_summary AS (
+        SELECT *
+        FROM xrpl_rich_list_summary s
+        WHERE s.created_at >= CURRENT_TIMESTAMP - INTERVAL '3 days'
+    )
+    SELECT 
+        c.country as grouped_label,
+        SUM(s.count) as count,
+        SUM(s.total_balance) as total_balance,
+        SUM(s.total_escrow) as total_escrow,
+        SUM(s.total_xrp) as total_xrp,
+        date_trunc('hour', s.created_at) as created_at
+    FROM latest_summary s
+    JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+    GROUP BY c.country, date_trunc('hour', s.created_at)
+    ON CONFLICT (grouped_label, created_at) 
+    DO UPDATE SET
+        count = EXCLUDED.count,
+        total_balance = EXCLUDED.total_balance,
+        total_escrow = EXCLUDED.total_escrow,
+        total_xrp = EXCLUDED.total_xrp;
+
+    -- エスクロー抜きの最新データを挿入
+    INSERT INTO xrpl_rich_list_available_hourly 
+        (grouped_label, count, total_balance, total_escrow, total_xrp, created_at)
+    WITH latest_summary AS (
+        SELECT *
+        FROM xrpl_rich_list_summary s
+        WHERE s.created_at >= CURRENT_TIMESTAMP - INTERVAL '3 days'
+    )
+    SELECT 
+        s.grouped_label,
+        s.count,
+        s.total_balance,
+        s.total_escrow,
+        s.total_balance as total_xrp, -- エスクロー抜きの合計
+        date_trunc('hour', s.created_at) as created_at
+    FROM latest_summary s
+    GROUP BY s.grouped_label, s.count, s.total_balance, s.total_escrow, date_trunc('hour', s.created_at)
+    ON CONFLICT (grouped_label, created_at) 
+    DO UPDATE SET
+        count = EXCLUDED.count,
+        total_balance = EXCLUDED.total_balance,
+        total_escrow = EXCLUDED.total_escrow,
+        total_xrp = EXCLUDED.total_xrp;
+END;
+$$;

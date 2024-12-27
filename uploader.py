@@ -191,6 +191,23 @@ class SupabaseUploader:
             print(f"Error updating country changes: {e}")
             return False
 
+    def update_hourly_statistics(self) -> bool:
+        try:
+            # PostgreSQL関数を呼び出す
+            response = self.supabase.rpc(
+                'update_hourly_statistics'
+            ).execute()
+            
+            if hasattr(response, 'error') and response.error:
+                raise Exception(f"Hourly statistics update failed: {response.error}")
+            
+            print("Successfully updated hourly statistics")
+            return True
+            
+        except Exception as e:
+            print(f"Error updating hourly statistics: {e}")
+            return False
+
     def cleanup_old_data(self) -> bool:
         try:
             # PostgreSQL関数を呼び出す
@@ -241,6 +258,10 @@ class RichListUploadProcessor:
             print("Calculating country changes...")
             if not self.uploader.update_country_changes():
                 raise Exception("Country changes calculation failed")
+
+            print("Calculating hourly statistics...")
+            if not self.uploader.update_hourly_statistics():
+                raise Exception("Hourly statistics calculation failed")
     
             print("Cleaning up old data...")
             if not self.uploader.cleanup_old_data():
