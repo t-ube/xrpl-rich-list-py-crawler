@@ -99,6 +99,9 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
+    -- タイムアウト時間を1分（60秒）に設定
+    SET LOCAL statement_timeout = '60000'; -- ミリ秒単位
+    
     -- 既存のデータを削除
     DELETE FROM xrpl_rich_list_changes WHERE TRUE;
     
@@ -252,6 +255,9 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
+    -- タイムアウト時間を1分（60秒）に設定
+    SET LOCAL statement_timeout = '60000'; -- ミリ秒単位
+    
     -- 既存のデータを削除
     DELETE FROM xrpl_rich_list_available_changes WHERE TRUE;
     
@@ -912,6 +918,125 @@ BEGIN
         total_xrp = EXCLUDED.total_xrp;
 
     -- エスクロー抜きの最新データを挿入
+    INSERT INTO xrpl_rich_list_available_hourly 
+        (grouped_label, count, total_balance, total_escrow, total_xrp, created_at)
+    WITH latest_summary AS (
+        SELECT *
+        FROM xrpl_rich_list_summary s
+        WHERE s.created_at >= CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days'
+    )
+    SELECT 
+        s.grouped_label,
+        s.count,
+        s.total_balance,
+        s.total_escrow,
+        s.total_balance as total_xrp,
+        date_trunc('hour', s.created_at AT TIME ZONE 'UTC') as created_at
+    FROM latest_summary s
+    GROUP BY s.grouped_label, s.count, s.total_balance, s.total_escrow, date_trunc('hour', s.created_at AT TIME ZONE 'UTC')
+    ON CONFLICT (grouped_label, created_at) 
+    DO UPDATE SET
+        count = EXCLUDED.count,
+        total_balance = EXCLUDED.total_balance,
+        total_escrow = EXCLUDED.total_escrow,
+        total_xrp = EXCLUDED.total_xrp;
+END;
+$$;
+
+-- 古いデータ削除用の関数
+CREATE OR REPLACE FUNCTION delete_old_statistics()
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    DELETE FROM xrpl_rich_list_category_hourly 
+    WHERE created_at < CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days';
+    
+    DELETE FROM xrpl_rich_list_country_hourly 
+    WHERE created_at < CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days';
+    
+    DELETE FROM xrpl_rich_list_available_hourly 
+    WHERE created_at < CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days';
+END;
+$$;
+
+-- カテゴリ統計更新用の関数
+CREATE OR REPLACE FUNCTION update_category_statistics()
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    INSERT INTO xrpl_rich_list_category_hourly 
+        (grouped_label, count, total_balance, total_escrow, total_xrp, created_at)
+    WITH latest_summary AS (
+        SELECT *
+        FROM xrpl_rich_list_summary s
+        WHERE s.created_at >= CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days'
+    )
+    SELECT 
+        c.category as grouped_label,
+        SUM(s.count) as count,
+        SUM(s.total_balance) as total_balance,
+        SUM(s.total_escrow) as total_escrow,
+        SUM(s.total_xrp) as total_xrp,
+        date_trunc('hour', s.created_at AT TIME ZONE 'UTC') as created_at
+    FROM latest_summary s
+    JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+    GROUP BY c.category, date_trunc('hour', s.created_at AT TIME ZONE 'UTC')
+    ON CONFLICT (grouped_label, created_at) 
+    DO UPDATE SET
+        count = EXCLUDED.count,
+        total_balance = EXCLUDED.total_balance,
+        total_escrow = EXCLUDED.total_escrow,
+        total_xrp = EXCLUDED.total_xrp;
+END;
+$$;
+
+-- 国別統計更新用の関数
+CREATE OR REPLACE FUNCTION update_country_statistics()
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    INSERT INTO xrpl_rich_list_country_hourly 
+        (grouped_label, count, total_balance, total_escrow, total_xrp, created_at)
+    WITH latest_summary AS (
+        SELECT *
+        FROM xrpl_rich_list_summary s
+        WHERE s.created_at >= CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days'
+    )
+    SELECT 
+        c.country as grouped_label,
+        SUM(s.count) as count,
+        SUM(s.total_balance) as total_balance,
+        SUM(s.total_escrow) as total_escrow,
+        SUM(s.total_xrp) as total_xrp,
+        date_trunc('hour', s.created_at AT TIME ZONE 'UTC') as created_at
+    FROM latest_summary s
+    JOIN xrpl_rich_list_categories c ON s.grouped_label = c.grouped_label
+    GROUP BY c.country, date_trunc('hour', s.created_at AT TIME ZONE 'UTC')
+    ON CONFLICT (grouped_label, created_at) 
+    DO UPDATE SET
+        count = EXCLUDED.count,
+        total_balance = EXCLUDED.total_balance,
+        total_escrow = EXCLUDED.total_escrow,
+        total_xrp = EXCLUDED.total_xrp;
+END;
+$$;
+
+-- 利用可能額統計更新用の関数
+CREATE OR REPLACE FUNCTION update_available_statistics()
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- タイムアウト時間を1分（60秒）に設定
+    SET LOCAL statement_timeout = '60000'; -- ミリ秒単位
+
     INSERT INTO xrpl_rich_list_available_hourly 
         (grouped_label, count, total_balance, total_escrow, total_xrp, created_at)
     WITH latest_summary AS (

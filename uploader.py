@@ -123,7 +123,7 @@ class SupabaseUploader:
             print(f"Error updating summary table: {e}")
             return False
 
-    def update_balance_changes(self) -> bool:
+    def update_balance_changes(self) -> bool: #3677
         try:
             # PostgreSQL関数を呼び出す
             response = self.supabase.rpc(
@@ -140,7 +140,7 @@ class SupabaseUploader:
             print(f"Error updating balance changes: {e}")
             return False
 
-    def update_available_changes(self) -> bool:
+    def update_available_changes(self) -> bool: #1726
         try:
             # PostgreSQL関数を呼び出す
             response = self.supabase.rpc(
@@ -157,7 +157,7 @@ class SupabaseUploader:
             print(f"Error updating available changes: {e}")
             return False
 
-    def update_category_changes(self) -> bool:
+    def update_category_changes(self) -> bool: #32
         try:
             # PostgreSQL関数を呼び出す
             response = self.supabase.rpc(
@@ -207,6 +207,74 @@ class SupabaseUploader:
         except Exception as e:
             print(f"Error cleaning up old data: {e}")
             return False
+    
+    def cleanup_old_statistics(self) -> bool:
+        try:
+            # PostgreSQL関数を呼び出す
+            response = self.supabase.rpc(
+                'delete_old_statistics'
+            ).execute()
+            
+            if hasattr(response, 'error') and response.error:
+                raise Exception(f"Data cleanup failed: {response.error}")
+
+            print("Successfully cleaned up old statistics")
+            return True
+            
+        except Exception as e:
+            print(f"Error cleaning up old statistics: {e}")
+            return False
+            
+    def update_category_statistics(self) -> bool: #228
+        try:
+            # PostgreSQL関数を呼び出す
+            response = self.supabase.rpc(
+                'update_category_statistics'
+            ).execute()
+            
+            if hasattr(response, 'error') and response.error:
+                raise Exception(f"Category statistics update failed: {response.error}")
+            
+            print("Successfully updated category statistics")
+            return True
+            
+        except Exception as e:
+            print(f"Error updating category statistics: {e}")
+            return False
+
+    def update_country_statistics(self) -> bool: #299
+        try:
+            # PostgreSQL関数を呼び出す
+            response = self.supabase.rpc(
+                'update_country_statistics'
+            ).execute()
+            
+            if hasattr(response, 'error') and response.error:
+                raise Exception(f"Country statistics update failed: {response.error}")
+            
+            print("Successfully updated country statistics")
+            return True
+            
+        except Exception as e:
+            print(f"Error updating country statistics: {e}")
+            return False
+
+    def update_available_statistics(self) -> bool: #4116
+        try:
+            # PostgreSQL関数を呼び出す
+            response = self.supabase.rpc(
+                'update_available_statistics'
+            ).execute()
+            
+            if hasattr(response, 'error') and response.error:
+                raise Exception(f"Available statistics update failed: {response.error}")
+            
+            print("Successfully updated available statistics")
+            return True
+            
+        except Exception as e:
+            print(f"Error updating available statistics: {e}")
+            return False
 
 
 class RichListUploadProcessor:
@@ -241,7 +309,23 @@ class RichListUploadProcessor:
             print("Calculating country changes...")
             if not self.uploader.update_country_changes():
                 raise Exception("Country changes calculation failed")
+            
+            print("Cleaning up old statistics...")
+            if not self.uploader.cleanup_old_statistics(temp_csv_path):
+                raise Exception("Statistics cleanup failed")
     
+            print("Calculating category statistics...")
+            if not self.uploader.update_category_statistics():
+                raise Exception("Country statistics calculation failed")
+
+            print("Calculating country statistics...")
+            if not self.uploader.update_country_statistics():
+                raise Exception("Country statistics calculation failed")
+
+            print("Calculating available statistics...")
+            if not self.uploader.update_available_statistics():
+                raise Exception("Country statistics calculation failed")
+            
             print("Cleaning up old data...")
             if not self.uploader.cleanup_old_data():
                 raise Exception("Data cleanup failed")

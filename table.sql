@@ -31,7 +31,7 @@ CREATE TABLE xrpl_rich_list_summary (
     total_balance NUMERIC,
     total_escrow NUMERIC,
     total_xrp NUMERIC, -- balance + escrowの合計
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_summary_created_at ON xrpl_rich_list_summary(created_at);
@@ -115,6 +115,138 @@ CREATE TRIGGER update_categories_updated_at
     BEFORE UPDATE ON xrpl_rich_list_categories
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+-- カテゴリごとの合計変化を追跡するテーブル
+CREATE TABLE xrpl_rich_list_category_changes (
+    id SERIAL PRIMARY KEY,
+    category VARCHAR(50) NOT NULL,
+    hours INTEGER NOT NULL,  -- 1, 3, 24, 168, 720
+    count INTEGER,
+    total_balance NUMERIC NOT NULL,
+    total_escrow NUMERIC NOT NULL,
+    total_xrp NUMERIC NOT NULL,
+    balance_change NUMERIC,
+    percentage_change NUMERIC,
+    calculated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- カテゴリの制約（xrpl_rich_list_categoriesと同じ制約を維持）
+    CONSTRAINT valid_category CHECK (
+        category IN (
+            'Major Contributor',
+            'Exchange',
+            'Casino/Gambling',
+            'Payment Service',
+            'DeFi Protocol',
+            'Trading Service',
+            'NFT/Gaming',
+            'Custody/Institution',
+            'Individual',
+            'Other'
+        )
+    )
+);
+
+-- 効率的な検索のためのインデックス
+CREATE INDEX idx_category_changes_category ON xrpl_rich_list_category_changes(category);
+CREATE INDEX idx_category_changes_hours ON xrpl_rich_list_category_changes(hours);
+CREATE INDEX idx_category_changes_calculated_at ON xrpl_rich_list_category_changes(calculated_at);
+
+
+-- 国別の合計変化を追跡するテーブル
+CREATE TABLE xrpl_rich_list_country_changes (
+    id SERIAL PRIMARY KEY,
+    country VARCHAR(50) NOT NULL,
+    hours INTEGER NOT NULL,  -- 1, 3, 24, 168, 720
+    count INTEGER,
+    total_balance NUMERIC NOT NULL,
+    total_escrow NUMERIC NOT NULL,
+    total_xrp NUMERIC NOT NULL,
+    balance_change NUMERIC,
+    percentage_change NUMERIC,
+    calculated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Unknown をデフォルトとして許可
+    CONSTRAINT valid_country CHECK (country <> '')
+);
+
+-- 効率的な検索のためのインデックス
+CREATE INDEX idx_country_changes_country ON xrpl_rich_list_country_changes(country);
+CREATE INDEX idx_country_changes_hours ON xrpl_rich_list_country_changes(hours);
+CREATE INDEX idx_country_changes_calculated_at ON xrpl_rich_list_country_changes(calculated_at);
+
+-- エスクロー抜きの時系列データを保存するテーブル
+CREATE TABLE xrpl_rich_list_available_hourly (
+    id SERIAL PRIMARY KEY,
+    grouped_label VARCHAR(255) NOT NULL,
+    count INTEGER,
+    total_balance NUMERIC NOT NULL,
+    total_escrow NUMERIC NOT NULL,
+    total_xrp NUMERIC NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    
+    -- 同じ時間のデータが重複しないように
+    CONSTRAINT unique_available_hour UNIQUE (grouped_label, created_at)
+);
+
+-- インデックスの作成
+CREATE INDEX idx_available_hourly_timestamp ON xrpl_rich_list_available_hourly(created_at);
+CREATE INDEX idx_available_hourly_label ON xrpl_rich_list_available_hourly(grouped_label);
+
+-- カテゴリごとの時系列データを保存するテーブル
+CREATE TABLE xrpl_rich_list_category_hourly (
+    id SERIAL PRIMARY KEY,
+    grouped_label VARCHAR(50) NOT NULL,
+    count INTEGER,
+    total_balance NUMERIC NOT NULL,
+    total_escrow NUMERIC NOT NULL,
+    total_xrp NUMERIC NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    
+    -- カテゴリの制約（既存のテーブルと同じ）
+    CONSTRAINT valid_category_hourly CHECK (
+        grouped_label IN (
+            'Major Contributor',
+            'Exchange',
+            'Casino/Gambling',
+            'Payment Service',
+            'DeFi Protocol',
+            'Trading Service',
+            'NFT/Gaming',
+            'Custody/Institution',
+            'Individual',
+            'Other'
+        )
+    ),
+    
+    -- 同じ時間のデータが重複しないように
+    CONSTRAINT unique_category_hour UNIQUE (grouped_label, created_at)
+);
+
+-- インデックスの作成
+CREATE INDEX idx_category_hourly_timestamp ON xrpl_rich_list_category_hourly(created_at);
+CREATE INDEX idx_category_hourly_category ON xrpl_rich_list_category_hourly(grouped_label);
+
+-- 国ごとの時系列データを保存するテーブル
+CREATE TABLE xrpl_rich_list_country_hourly (
+    id SERIAL PRIMARY KEY,
+    grouped_label VARCHAR(50) NOT NULL,
+    count INTEGER,
+    total_balance NUMERIC NOT NULL,
+    total_escrow NUMERIC NOT NULL,
+    total_xrp NUMERIC NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    
+    -- 国名の制約
+    CONSTRAINT valid_country_hourly CHECK (grouped_label <> ''),
+    
+    -- 同じ時間のデータが重複しないように
+    CONSTRAINT unique_country_hour UNIQUE (grouped_label, created_at)
+);
+
+-- インデックスの作成
+CREATE INDEX idx_country_hourly_timestamp ON xrpl_rich_list_country_hourly(created_at);
+CREATE INDEX idx_country_hourly_country ON xrpl_rich_list_country_hourly(grouped_label);
+
 
 -- ビュー定義
 CREATE VIEW xrpl_rich_list_summary_with_changes AS
@@ -252,40 +384,6 @@ LEFT JOIN xrpl_rich_list_available_changes h720
    AND h720.hours = 720
 ORDER BY s.total_balance DESC;
 
--- カテゴリごとの合計変化を追跡するテーブル
-CREATE TABLE xrpl_rich_list_category_changes (
-    id SERIAL PRIMARY KEY,
-    category VARCHAR(50) NOT NULL,
-    hours INTEGER NOT NULL,  -- 1, 3, 24, 168, 720
-    count INTEGER,
-    total_balance NUMERIC NOT NULL,
-    total_escrow NUMERIC NOT NULL,
-    total_xrp NUMERIC NOT NULL,
-    balance_change NUMERIC,
-    percentage_change NUMERIC,
-    calculated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    -- カテゴリの制約（xrpl_rich_list_categoriesと同じ制約を維持）
-    CONSTRAINT valid_category CHECK (
-        category IN (
-            'Major Contributor',
-            'Exchange',
-            'Casino/Gambling',
-            'Payment Service',
-            'DeFi Protocol',
-            'Trading Service',
-            'NFT/Gaming',
-            'Custody/Institution',
-            'Individual',
-            'Other'
-        )
-    )
-);
-
--- 効率的な検索のためのインデックス
-CREATE INDEX idx_category_changes_category ON xrpl_rich_list_category_changes(category);
-CREATE INDEX idx_category_changes_hours ON xrpl_rich_list_category_changes(hours);
-CREATE INDEX idx_category_changes_calculated_at ON xrpl_rich_list_category_changes(calculated_at);
 
 -- カテゴリ別のサマリービューを作成
 CREATE OR REPLACE VIEW xrpl_rich_list_category_summary_with_changes AS
@@ -348,27 +446,6 @@ SELECT
 FROM category_data
 ORDER BY total_xrp DESC;
 
--- 国別の合計変化を追跡するテーブル
-CREATE TABLE xrpl_rich_list_country_changes (
-    id SERIAL PRIMARY KEY,
-    country VARCHAR(50) NOT NULL,
-    hours INTEGER NOT NULL,  -- 1, 3, 24, 168, 720
-    count INTEGER,
-    total_balance NUMERIC NOT NULL,
-    total_escrow NUMERIC NOT NULL,
-    total_xrp NUMERIC NOT NULL,
-    balance_change NUMERIC,
-    percentage_change NUMERIC,
-    calculated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Unknown をデフォルトとして許可
-    CONSTRAINT valid_country CHECK (country <> '')
-);
-
--- 効率的な検索のためのインデックス
-CREATE INDEX idx_country_changes_country ON xrpl_rich_list_country_changes(country);
-CREATE INDEX idx_country_changes_hours ON xrpl_rich_list_country_changes(hours);
-CREATE INDEX idx_country_changes_calculated_at ON xrpl_rich_list_country_changes(calculated_at);
 
 -- 国別の最新データを表示するビュー
 CREATE VIEW xrpl_rich_list_country_summary_with_changes AS
@@ -430,77 +507,3 @@ SELECT
     *
 FROM country_data
 ORDER BY total_xrp DESC;
-
--- エスクロー抜きの時系列データを保存するテーブル
-CREATE TABLE xrpl_rich_list_available_hourly (
-    id SERIAL PRIMARY KEY,
-    grouped_label VARCHAR(255) NOT NULL,
-    count INTEGER,
-    total_balance NUMERIC NOT NULL,
-    total_escrow NUMERIC NOT NULL,
-    total_xrp NUMERIC NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    
-    -- 同じ時間のデータが重複しないように
-    CONSTRAINT unique_available_hour UNIQUE (grouped_label, created_at)
-);
-
--- インデックスの作成
-CREATE INDEX idx_available_hourly_timestamp ON xrpl_rich_list_available_hourly(created_at);
-CREATE INDEX idx_available_hourly_label ON xrpl_rich_list_available_hourly(grouped_label);
-
--- カテゴリごとの時系列データを保存するテーブル
-CREATE TABLE xrpl_rich_list_category_hourly (
-    id SERIAL PRIMARY KEY,
-    grouped_label VARCHAR(50) NOT NULL,
-    count INTEGER,
-    total_balance NUMERIC NOT NULL,
-    total_escrow NUMERIC NOT NULL,
-    total_xrp NUMERIC NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    
-    -- カテゴリの制約（既存のテーブルと同じ）
-    CONSTRAINT valid_category_hourly CHECK (
-        grouped_label IN (
-            'Major Contributor',
-            'Exchange',
-            'Casino/Gambling',
-            'Payment Service',
-            'DeFi Protocol',
-            'Trading Service',
-            'NFT/Gaming',
-            'Custody/Institution',
-            'Individual',
-            'Other'
-        )
-    ),
-    
-    -- 同じ時間のデータが重複しないように
-    CONSTRAINT unique_category_hour UNIQUE (grouped_label, created_at)
-);
-
--- インデックスの作成
-CREATE INDEX idx_category_hourly_timestamp ON xrpl_rich_list_category_hourly(created_at);
-CREATE INDEX idx_category_hourly_category ON xrpl_rich_list_category_hourly(grouped_label);
-
--- 国ごとの時系列データを保存するテーブル
-CREATE TABLE xrpl_rich_list_country_hourly (
-    id SERIAL PRIMARY KEY,
-    grouped_label VARCHAR(50) NOT NULL,
-    count INTEGER,
-    total_balance NUMERIC NOT NULL,
-    total_escrow NUMERIC NOT NULL,
-    total_xrp NUMERIC NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    
-    -- 国名の制約
-    CONSTRAINT valid_country_hourly CHECK (grouped_label <> ''),
-    
-    -- 同じ時間のデータが重複しないように
-    CONSTRAINT unique_country_hour UNIQUE (grouped_label, created_at)
-);
-
--- インデックスの作成
-CREATE INDEX idx_country_hourly_timestamp ON xrpl_rich_list_country_hourly(created_at);
-CREATE INDEX idx_country_hourly_country ON xrpl_rich_list_country_hourly(grouped_label);
-
