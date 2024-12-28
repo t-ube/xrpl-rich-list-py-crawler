@@ -305,8 +305,8 @@ WITH latest_summary AS (
 SELECT 
     s.*,
     s.total_xrp as show_total_xrp,
-    c.category,
-    c.country,
+    c.category as entity_category,
+    c.country as entity_country,
     h1.balance_change as change_1h,
     h1.percentage_change as percentage_1h,
     h3.balance_change as change_3h,
