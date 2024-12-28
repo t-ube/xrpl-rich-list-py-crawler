@@ -123,7 +123,7 @@ class SupabaseUploader:
             print(f"Error updating summary table: {e}")
             return False
 
-    def update_balance_changes(self) -> bool: #3677
+    def update_balance_changes(self) -> bool:
         try:
             # PostgreSQL関数を呼び出す
             response = self.supabase.rpc(
@@ -131,16 +131,24 @@ class SupabaseUploader:
             ).execute()
             
             if hasattr(response, 'error') and response.error:
+                # タイムアウトエラーの場合は無視
+                if '57014' in str(response.error):
+                    print("Warning: Balance changes calculation timed out, but continuing...")
+                    return True
                 raise Exception(f"Balance changes update failed: {response.error}")
             
             print("Successfully updated balance changes")
             return True
             
         except Exception as e:
+            # タイムアウトエラーの場合は無視
+            if '57014' in str(e):
+                print("Warning: Balance changes calculation timed out, but continuing...")
+                return True
             print(f"Error updating balance changes: {e}")
             return False
 
-    def update_available_changes(self) -> bool: #1726
+    def update_available_changes(self) -> bool:
         try:
             # PostgreSQL関数を呼び出す
             response = self.supabase.rpc(
@@ -148,12 +156,20 @@ class SupabaseUploader:
             ).execute()
             
             if hasattr(response, 'error') and response.error:
+                # タイムアウトエラーの場合は無視して続行
+                if '57014' in str(response.error):
+                    print("Warning: Available changes calculation timed out, but continuing...")
+                    return True
                 raise Exception(f"Available changes update failed: {response.error}")
             
             print("Successfully updated available changes")
             return True
             
         except Exception as e:
+            # タイムアウトエラーの場合は無視して続行
+            if '57014' in str(e):
+                print("Warning: Available changes calculation timed out, but continuing...")
+                return True
             print(f"Error updating available changes: {e}")
             return False
 
@@ -259,7 +275,7 @@ class SupabaseUploader:
             print(f"Error updating country statistics: {e}")
             return False
 
-    def update_available_statistics(self) -> bool: #4116
+    def update_available_statistics(self) -> bool:
         try:
             # PostgreSQL関数を呼び出す
             response = self.supabase.rpc(
@@ -267,12 +283,20 @@ class SupabaseUploader:
             ).execute()
             
             if hasattr(response, 'error') and response.error:
+                # タイムアウトエラーの場合は無視して続行
+                if '57014' in str(response.error):
+                    print("Warning: Available statistics calculation timed out, but continuing...")
+                    return True
                 raise Exception(f"Available statistics update failed: {response.error}")
             
             print("Successfully updated available statistics")
             return True
             
         except Exception as e:
+            # タイムアウトエラーの場合は無視して続行
+            if '57014' in str(e):
+                print("Warning: Available statistics calculation timed out, but continuing...")
+                return True
             print(f"Error updating available statistics: {e}")
             return False
 

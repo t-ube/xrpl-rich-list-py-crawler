@@ -59,7 +59,7 @@ CREATE TABLE xrpl_rich_list_available_changes (
     hours INTEGER,  -- 1, 3, 24, 168, 720
     balance_change NUMERIC,
     percentage_change NUMERIC,
-    calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    calculated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- インデックス
