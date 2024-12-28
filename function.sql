@@ -1039,11 +1039,6 @@ BEGIN
 
     INSERT INTO xrpl_rich_list_available_hourly 
         (grouped_label, count, total_balance, total_escrow, total_xrp, created_at)
-    WITH latest_summary AS (
-        SELECT *
-        FROM xrpl_rich_list_summary s
-        WHERE s.created_at >= CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days'
-    )
     SELECT 
         s.grouped_label,
         s.count,
@@ -1051,7 +1046,8 @@ BEGIN
         s.total_escrow,
         s.total_balance as total_xrp,
         date_trunc('hour', s.created_at AT TIME ZONE 'UTC') as created_at
-    FROM latest_summary s
+    FROM xrpl_rich_list_summary s
+    WHERE s.created_at >= CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '3 days'
     GROUP BY s.grouped_label, s.count, s.total_balance, s.total_escrow, date_trunc('hour', s.created_at AT TIME ZONE 'UTC')
     ON CONFLICT (grouped_label, created_at) 
     DO UPDATE SET

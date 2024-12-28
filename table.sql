@@ -36,6 +36,7 @@ CREATE TABLE xrpl_rich_list_summary (
 
 CREATE INDEX idx_summary_created_at ON xrpl_rich_list_summary(created_at);
 CREATE INDEX idx_summary_grouped_label ON xrpl_rich_list_summary(grouped_label);
+CREATE INDEX IF NOT EXISTS idx_xrpl_rich_list_summary_grouped ON xrpl_rich_list_summary(grouped_label, created_at);
 
 -- テーブル定義
 CREATE TABLE xrpl_rich_list_changes (
