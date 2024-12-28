@@ -1,0 +1,42 @@
+name: XRP Rich List Updater
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scrape-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 59
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    # アップローダー用の依存関係インストール
+    - name: Install uploader dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install supabase==2.7.1
+
+    # アップロード実行
+    - name: Run uploader
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      run: python uploader.py
+
+    # Cloudflareのデプロイフック
+    - name: Trigger Cloudflare Build Hook
+      if: success()
+      run: |
+        curl -X POST "https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/${CLOUDFLARE_DEPLOY_HOOK}"
+      env:
+        CLOUDFLARE_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_DEPLOY_HOOK }}
