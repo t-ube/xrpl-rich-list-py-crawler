@@ -335,7 +335,7 @@ class RichListUploadProcessor:
                 raise Exception("Country changes calculation failed")
             
             print("Cleaning up old statistics...")
-            if not self.uploader.cleanup_old_statistics(temp_csv_path):
+            if not self.uploader.cleanup_old_statistics():
                 raise Exception("Statistics cleanup failed")
     
             print("Calculating category statistics...")
