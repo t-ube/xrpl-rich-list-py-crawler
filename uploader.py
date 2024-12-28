@@ -300,6 +300,31 @@ class SupabaseUploader:
             print(f"Error updating available statistics: {e}")
             return False
 
+    def analyze_rich_list_tables(self) -> bool:
+        try:
+            # PostgreSQL関数を呼び出す
+            response = self.supabase.rpc(
+                'analyze_rich_list_tables'
+            ).execute()
+            
+            if hasattr(response, 'error') and response.error:
+                # タイムアウトエラーの場合は無視して続行
+                if '57014' in str(response.error):
+                    print("Warning: Analyze timed out, but continuing...")
+                    return True
+                raise Exception(f"Analyze failed: {response.error}")
+            
+            print("Successfully analyze")
+            return True
+            
+        except Exception as e:
+            # タイムアウトエラーの場合は無視して続行
+            if '57014' in str(e):
+                print("Warning: Analyze timed out, but continuing...")
+                return True
+            print(f"Error analyze: {e}")
+            return False
+
 
 class RichListUploadProcessor:
     def __init__(self):
@@ -353,6 +378,10 @@ class RichListUploadProcessor:
             print("Cleaning up old data...")
             if not self.uploader.cleanup_old_data():
                 raise Exception("Data cleanup failed")
+
+            print("Analyze data...")
+            if not self.uploader.analyze_rich_list_tables():
+                raise Exception("Data analyze failed")
 
             try:
                 os.remove(temp_csv_path)

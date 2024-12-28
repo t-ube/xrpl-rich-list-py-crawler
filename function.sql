@@ -1057,3 +1057,26 @@ BEGIN
         total_xrp = EXCLUDED.total_xrp;
 END;
 $$;
+
+-- ANALYZE実行用の関数
+CREATE OR REPLACE FUNCTION analyze_rich_list_tables()
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- タイムアウト時間を30秒に設定
+    SET LOCAL statement_timeout = '30000';
+
+    -- 統計情報の更新（ANALYZE のみ）
+    ANALYZE xrpl_rich_list_summary;
+    ANALYZE xrpl_rich_list;
+    ANALYZE xrpl_rich_list_changes;
+    ANALYZE xrpl_rich_list_available_changes;
+    ANALYZE xrpl_rich_list_category_changes;
+    ANALYZE xrpl_rich_list_country_changes;
+    ANALYZE xrpl_rich_list_available_hourly;
+    ANALYZE xrpl_rich_list_category_hourly;
+    ANALYZE xrpl_rich_list_country_hourly;
+END;
+$$;

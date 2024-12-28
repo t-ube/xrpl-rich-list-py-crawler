@@ -192,6 +192,7 @@ CREATE TABLE xrpl_rich_list_available_hourly (
 -- インデックスの作成
 CREATE INDEX idx_available_hourly_timestamp ON xrpl_rich_list_available_hourly(created_at);
 CREATE INDEX idx_available_hourly_label ON xrpl_rich_list_available_hourly(grouped_label);
+CREATE INDEX IF NOT EXISTS idx_available_hourly_grouped ON xrpl_rich_list_available_hourly(grouped_label, created_at);
 
 -- カテゴリごとの時系列データを保存するテーブル
 CREATE TABLE xrpl_rich_list_category_hourly (
