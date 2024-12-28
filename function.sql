@@ -97,11 +97,9 @@ CREATE OR REPLACE FUNCTION update_balance_changes()
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET statement_timeout = '60s'
 AS $$
-BEGIN
-    -- タイムアウト時間を1分（60秒）に設定
-    SET LOCAL statement_timeout = '60000'; -- ミリ秒単位
-    
+BEGIN    
     -- 既存のデータを削除
     DELETE FROM xrpl_rich_list_changes WHERE TRUE;
     
@@ -253,11 +251,9 @@ CREATE OR REPLACE FUNCTION update_available_changes()
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET statement_timeout = '60s'
 AS $$
 BEGIN
-    -- タイムアウト時間を1分（60秒）に設定
-    SET LOCAL statement_timeout = '60000'; -- ミリ秒単位
-    
     -- 既存のデータを削除
     DELETE FROM xrpl_rich_list_available_changes WHERE TRUE;
     
@@ -1032,11 +1028,9 @@ CREATE OR REPLACE FUNCTION update_available_statistics()
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET statement_timeout = '60s'
 AS $$
 BEGIN
-    -- タイムアウト時間を1分（60秒）に設定
-    SET LOCAL statement_timeout = '60000'; -- ミリ秒単位
-
     INSERT INTO xrpl_rich_list_available_hourly 
         (grouped_label, count, total_balance, total_escrow, total_xrp, created_at)
     SELECT 
@@ -1063,11 +1057,9 @@ CREATE OR REPLACE FUNCTION analyze_rich_list_tables()
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET statement_timeout = '60s'
 AS $$
 BEGIN
-    -- タイムアウト時間を30秒に設定
-    SET LOCAL statement_timeout = '30000';
-
     -- 統計情報の更新（ANALYZE のみ）
     ANALYZE xrpl_rich_list_summary;
     ANALYZE xrpl_rich_list;
