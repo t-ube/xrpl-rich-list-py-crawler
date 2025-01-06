@@ -1072,3 +1072,27 @@ BEGIN
     ANALYZE xrpl_rich_list_country_hourly;
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION get_significant_changes(
+    percentage_threshold FLOAT,
+    amount_threshold FLOAT
+) 
+RETURNS TABLE (
+    grouped_label VARCHAR(255),
+    change_1h NUMERIC,
+    percentage_1h NUMERIC
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        c.grouped_label,
+        c.change_1h,
+        c.percentage_1h
+    FROM xrpl_rich_list_summary_with_available_changes c
+    WHERE c.change_1h IS NOT NULL
+    AND ABS(c.percentage_1h) >= percentage_threshold
+    AND ABS(c.change_1h) >= amount_threshold
+    ORDER BY ABS(c.percentage_1h) DESC
+    LIMIT 5;
+END;
+$$ LANGUAGE plpgsql;
