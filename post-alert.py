@@ -3,6 +3,7 @@ import tweepy
 from supabase import create_client
 from dataclasses import dataclass
 from typing import List, Optional, Optional
+import time
 
 @dataclass
 class ExchangeChange:
@@ -80,7 +81,8 @@ class XRPAlertBot:
             lines.append(f"{change.name}")
             lines.append(f"  {arrow} {sign}{change.balance_change:,.0f} XRP ({sign}{change.percentage_change:.1f}%)")
 
-        lines.append("\nhttp://xrp-rich-list-summary.shirome.net")
+        timestamp = int(time.time())  # Unix timestamp
+        lines.append(f"\nhttp://xrp-rich-list-summary.shirome.net?timestamp={timestamp}")
         return "\n".join(lines)
 
     def post_alert(self, threshold_percentage: float = 5.0, threshold_amount: float = 1000000.0):
