@@ -12,8 +12,8 @@ class ExchangeChange:
 
 class SupabaseClient:
     def __init__(self):
-        supabase_url = os.environ("SUPABASE_URL")
-        supabase_key = os.environ("SUPABASE_KEY")
+        supabase_url = os.environ["SUPABASE_URL"]
+        supabase_key = os.environ["SUPABASE_KEY"]
         if not supabase_url or not supabase_key:
             raise ValueError("Supabase credentials not found")
         
@@ -59,11 +59,11 @@ class XRPAlertBot:
     def _init_twitter(self) -> tweepy.Client:
         """Twitter APIクライアントの初期化"""
         return tweepy.Client(
-            consumer_key=os.environ('TWITTER_API_KEY'),
-            consumer_secret=os.environ('TWITTER_API_SECRET'),
-            bearer_token=os.environ('TWITTER_BEARER_TOKEN'),
-            access_token=os.environ('TWITTER_ACCESS_TOKEN'),
-            access_token_secret=os.environ('TWITTER_ACCESS_TOKEN_SECRET')
+            consumer_key=os.environ["TWITTER_API_KEY"],
+            consumer_secret=os.environ["TWITTER_API_SECRET"],
+            bearer_token=os.environ["TWITTER_BEARER_TOKEN"],
+            access_token=os.environ["TWITTER_ACCESS_TOKEN"],
+            access_token_secret=os.environ["TWITTER_ACCESS_TOKEN_SECRET"]
         )
 
     def format_tweet(self, changes: List[ExchangeChange]) -> Optional[str]:
