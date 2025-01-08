@@ -107,7 +107,7 @@ class XRPAlertBot:
 def main():
     try:
         bot = XRPAlertBot()
-        bot.post_alert(threshold_percentage=0.1, threshold_amount=100000)
+        bot.post_alert(threshold_percentage=0.1, threshold_amount=500000)
     except Exception as e:
         print(f"Fatal error: {e}")
 

@@ -157,7 +157,8 @@ BEGIN
             h1.created_at = (
                 SELECT created_at 
                 FROM xrpl_rich_list_summary 
-                WHERE created_at <= c.created_at - INTERVAL '1 hour'
+                WHERE created_at > c.created_at - INTERVAL '70 minutes'
+                AND created_at <= c.created_at - INTERVAL '45 minutes'
                 ORDER BY created_at DESC 
                 LIMIT 1
             )
@@ -311,7 +312,8 @@ BEGIN
             h1.created_at = (
                 SELECT created_at 
                 FROM xrpl_rich_list_summary 
-                WHERE created_at <= c.created_at - INTERVAL '1 hour'
+                WHERE created_at > c.created_at - INTERVAL '70 minutes'
+                AND created_at <= c.created_at - INTERVAL '45 minutes'
                 ORDER BY created_at DESC 
                 LIMIT 1
             )
@@ -494,7 +496,8 @@ BEGIN
             WHERE s.created_at = (
                 SELECT created_at 
                 FROM xrpl_rich_list_summary 
-                WHERE created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '1 hour'
+                WHERE created_at > (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '70 minutes'
+                AND created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '45 minutes'
                 ORDER BY created_at DESC 
                 LIMIT 1
             )
@@ -707,7 +710,8 @@ BEGIN
             WHERE s.created_at = (
                 SELECT created_at 
                 FROM xrpl_rich_list_summary 
-                WHERE created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '1 hour'
+                WHERE created_at > (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '70 minutes'
+                AND created_at <= (SELECT created_at FROM current_totals LIMIT 1) - INTERVAL '45 minutes'
                 ORDER BY created_at DESC 
                 LIMIT 1
             )
@@ -1088,7 +1092,7 @@ BEGIN
         c.grouped_label,
         c.change_1h,
         c.percentage_1h
-    FROM xrpl_rich_list_summary_with_available_changes c
+    FROM xrpl_rich_list_summary_with_total_changes c
     WHERE c.change_1h IS NOT NULL
     AND ABS(c.percentage_1h) >= percentage_threshold
     AND ABS(c.change_1h) >= amount_threshold
