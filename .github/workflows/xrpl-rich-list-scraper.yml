@@ -45,6 +45,7 @@ jobs:
     - name: Install uploader dependencies
       run: |
         pip install supabase==2.7.1
+        pip install websockets>=10.0
         pip install tweepy==4.14.0
 
     # アップロード実行
