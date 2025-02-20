@@ -22,5 +22,10 @@ jobs:
         pip install supabase
         pip install websockets
 
+    - name: Check realtime dependencies
+      run: |
+        pip show realtime || echo "Realtime package not installed"
+        pip show realtime | grep Requires || echo "No dependencies found"
+
     - name: Run version check script
       run: python check_versions.py
