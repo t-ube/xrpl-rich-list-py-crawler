@@ -26,6 +26,8 @@ jobs:
       run: |
         pip show realtime || echo "Realtime package not installed"
         pip show realtime | grep Requires || echo "No dependencies found"
-
+    - name: Check full details of realtime package
+      run: |
+        pip show realtime
     - name: Run version check script
       run: python check_versions.py
