@@ -44,7 +44,9 @@ jobs:
     # アップローダー用の依存関係インストール
     - name: Install uploader dependencies
       run: |
+        pip uninstall -y websockets supabase tweepy
         pip install supabase==2.7.1
+        pip install realtime==2.3.0
         pip install websockets==10.4
         pip install tweepy==4.14.0
 
