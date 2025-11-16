@@ -3,6 +3,7 @@ create or replace function update_rich_list_summary()
 returns void
 language plpgsql
 security definer
+SET statement_timeout = '60s'
 as $$
 begin
     INSERT INTO xrpl_rich_list_summary (grouped_label, count, total_balance, total_escrow, total_xrp, created_at)
