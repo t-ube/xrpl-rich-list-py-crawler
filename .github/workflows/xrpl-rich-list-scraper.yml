@@ -32,6 +32,8 @@ jobs:
 
     # スクレイピング実行
     - name: Run scraper
+      env:
+        PYTHONUNBUFFERED: "1"
       run: | 
         python loader.py
         python validator.py
