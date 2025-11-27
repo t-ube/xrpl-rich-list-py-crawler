@@ -4,7 +4,8 @@ from typing import Optional, Tuple
 from dataclasses import dataclass
 import os
 
-from xrpl.asyncio.clients import AsyncJsonRpcClient
+#from xrpl.asyncio.clients import AsyncJsonRpcClient
+from xrpl.asyncio.clients import AsyncWebsocketClient
 from xrpl.models import AccountInfo, AccountObjects
 
 @dataclass
@@ -22,12 +23,23 @@ class XRPLBalanceValidator:
         self.retry_delay = retry_delay
 
     async def setup_client(self):
-        self.client = AsyncJsonRpcClient(self.node_url)
+        print("Connecting to XRPL node...")
+        self.client = AsyncWebsocketClient(self.node_url)
+        await self.client.open()
+        print("Connected successfully")
 
     async def cleanup_client(self):
-        if self.client and hasattr(self.client, '_client'):
-            await self.client._client.close()
-        self.client = None
+        if self.client:
+            await self.client.close()
+            self.client = None
+
+    #async def setup_client(self):
+    #    self.client = AsyncJsonRpcClient(self.node_url)
+
+    #async def cleanup_client(self):
+    #    if self.client and hasattr(self.client, '_client'):
+    #        await self.client._client.close()
+    #    self.client = None
 
     async def get_escrow_info(self, address: str) -> Optional[float]:
         """Get escrow balance for an account"""
