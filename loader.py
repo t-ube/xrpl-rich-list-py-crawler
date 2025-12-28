@@ -53,6 +53,7 @@ class XRPDataFetcher:
                         continue
                     raise Exception(f"API request failed after 3 attempts: {e}")
 
+    '''
     async def fetch_data(self, endpoint: str) -> List[Dict]:
         async with aiohttp.ClientSession(headers=self.headers) as session:
             for attempt in range(3):  # 3回までリトライ
@@ -77,6 +78,7 @@ class XRPDataFetcher:
                         await asyncio.sleep(5 * (attempt + 1))
                         continue
                     raise Exception(f"API request failed after 3 attempts: {e}")
+        '''
 
     def convert_balance_to_xrp(self, drops: int) -> float:
         return drops / 1_000_000
