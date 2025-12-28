@@ -409,6 +409,7 @@ create or replace function cleanup_old_rich_list_data()
 returns void
 language plpgsql
 security definer
+set statement_timeout = '60s'
 as $$
 begin
     -- 古いデータの削除
@@ -425,6 +426,7 @@ CREATE OR REPLACE FUNCTION update_category_changes()
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET statement_timeout = '60s'
 AS $$
 BEGIN
     -- 既存のデータを削除
@@ -638,6 +640,7 @@ CREATE OR REPLACE FUNCTION update_country_changes()
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET statement_timeout = '60s'
 AS $$
 BEGIN
     -- 既存のデータを削除
