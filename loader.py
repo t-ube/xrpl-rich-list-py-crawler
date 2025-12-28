@@ -4,6 +4,7 @@ import csv
 from datetime import datetime, timezone
 from typing import List, Dict, Set
 from dataclasses import dataclass
+import json
 
 @dataclass
 class XRPAccount:
@@ -23,7 +24,35 @@ class XRPDataFetcher:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
             'Accept': 'application/json'
         }
-        
+
+    async def fetch_data(self, endpoint: str) -> List[Dict]:
+        async with aiohttp.ClientSession(headers=self.headers) as session:
+            for attempt in range(3):  # 3回までリトライ
+                try:
+                    async with session.get(f"{self.base_url}/{endpoint}") as response:
+                        if response.status != 200:
+                            raise Exception(f"API request failed with status: {response.status}")
+                        
+                        content_type = response.headers.get('Content-Type', '')
+                        if 'application/json' not in content_type and 'text/json' not in content_type:
+                            raw = await response.read()
+                            if raw.lstrip().startswith((b"{", b"[")):
+                                return json.loads(raw.decode("utf-8", errors="strict"))
+                            if attempt < 2:
+                                print(f"Unexpected content type: {content_type}, retrying... (attempt {attempt + 1}/3)")
+                                await asyncio.sleep(5 * (attempt + 1)) 
+                                continue
+                            raise Exception(f"Unexpected content type: {content_type}")
+                        
+                        return await response.json()
+                        
+                except Exception as e:
+                    if attempt < 2:
+                        print(f"Error during API request: {e}, retrying... (attempt {attempt + 1}/3)")
+                        await asyncio.sleep(5 * (attempt + 1))
+                        continue
+                    raise Exception(f"API request failed after 3 attempts: {e}")
+
     async def fetch_data(self, endpoint: str) -> List[Dict]:
         async with aiohttp.ClientSession(headers=self.headers) as session:
             for attempt in range(3):  # 3回までリトライ
