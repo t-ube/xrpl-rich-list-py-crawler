@@ -409,7 +409,7 @@ create or replace function cleanup_old_rich_list_data()
 returns void
 language plpgsql
 security definer
-set statement_timeout = '60s'
+set statement_timeout = '120s'
 as $$
 begin
     -- 古いデータの削除
@@ -417,7 +417,7 @@ begin
     WHERE snapshot_date < CURRENT_TIMESTAMP - INTERVAL '2 days';
     
     DELETE FROM xrpl_rich_list_summary
-    WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '370 days';
+    WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '730 days';
 end;
 $$;
 
