@@ -145,11 +145,12 @@ class BufferClient:
             f"service={service} のチャンネルが見つかりません。接続済み: {available}"
         )
 
-    def create_post(self, channel_id: str, text: str, mode: str = "now") -> dict:
+    def create_post(self, channel_id: str, text: str, mode: str = "shareNow") -> dict:
         """投稿を作成する。
 
-        mode:
-            now             即時投稿
+        mode は ShareMode enum。有効値は次の4つのみ:
+            shareNow        即時投稿
+            shareNext       キューの先頭に割り込ませる
             addToQueue      キューの次の空きスロットに入れる
             customScheduled dueAt での予約（本スクリプトでは未使用）
         """
@@ -248,7 +249,7 @@ class XRPAlertBot:
                 return
 
             channel_id = self._resolve_channel_id()
-            post = self.buffer.create_post(channel_id, tweet_text, mode="now")
+            post = self.buffer.create_post(channel_id, tweet_text, mode="shareNow")
             print(f"Alert posted via Buffer: id={post['id']} status={post['status']}")
 
         except Exception as e:
